@@ -1082,6 +1082,7 @@ export class Renderer {
 			shader.setUniform1f("fov", Math.PI * camera.fov / 180);
 			shader.setUniform1f("near", camera.near);
 			shader.setUniform1f("far", camera.far);
+			shader.setUniform1f("nearPlaneHeight", screenHeight / 2 / Math.tan((Math.PI * camera.fov / 180) / 2));
 			
 			if(camera instanceof THREE.OrthographicCamera){
 				shader.setUniform("uUseOrthographicCamera", true);

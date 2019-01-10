@@ -27,6 +27,7 @@ uniform float uScreenHeight;
 uniform float fov;
 uniform float near;
 uniform float far;
+uniform float nearPlaneHeight;
 
 uniform bool uDebug;
 
@@ -558,18 +559,7 @@ float getPointSize(){
 			//pointSize = pointSize * projFactor;
 		}
 	#elif defined adaptive_point_size
-		if(uUseOrthographicCamera) {
-			float worldSpaceSize = 1.0 * size * r / getPointSizeAttenuation();
-			pointSize = (worldSpaceSize / uOrthoWidth) * uScreenWidth;
-		} else {
-
-			if(uIsLeafNode && false){
-				pointSize = size * spacing * projFactor;
-			}else{
-				float worldSpaceSize = 1.0 * size * r / getPointSizeAttenuation();
-				pointSize = worldSpaceSize * projFactor;
-			}
-		}
+		pointSize = size * 5. * nearPlaneHeight / gl_Position.w / pow(2., getLOD());
 	#endif
 
 	pointSize = max(minSize, pointSize);
