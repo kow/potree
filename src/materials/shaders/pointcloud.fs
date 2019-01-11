@@ -30,35 +30,22 @@ varying float	vRadius;
 varying float 	vPointSize;
 varying vec3 	vPosition;
 
-
-float specularStrength = 1.0;
-
 void main() {
 	gl_FragColor = vColor;
-	float depth = gl_FragCoord.z;
 
-	#if defined(circle_point_shape) || defined(paraboloid_point_shape) 
-		float u = 2.0 * gl_PointCoord.x - 1.0;
-		float v = 2.0 * gl_PointCoord.y - 1.0;
-	#endif
-	
-	#if defined(circle_point_shape) 
-		float cc = u*u + v*v;
-		if(cc > 1.0){
-			discard;
-		}
+	#if defined circle_point_shape
+		if (length (gl_PointCoord * 2. - 1.) > 1.) discard;
 	#endif
 
 	#if defined paraboloid_point_shape
-		float wi = 0.0 - ( u*u + v*v);
+		float wi = 0.0 - pow(length (gl_PointCoord * 2. - 1.), 2.);
 		vec4 pos = vec4(vViewPosition, 1.0);
 		pos.z += wi * vRadius;
 		float linearDepth = -pos.z;
 		pos = projectionMatrix * pos;
 		pos = pos / pos.w;
 		float expDepth = pos.z;
-		depth = (pos.z + 1.0) / 2.0;
-		gl_FragDepthEXT = depth;
+		gl_FragDepthEXT = (pos.z + 1.0) / 2.0;
 		
 		#if defined(color_weight_depth)
 			gl_FragColor.r = linearDepth;
