@@ -786,7 +786,7 @@ export class ProfileWindow extends EventDispatcher {
 				let material = entry.material;
 			
 				material.pointColorType = pointcloud.material.pointColorType;
-				material.uniforms.uColor = pointcloud.material.uniforms.uColor;
+				material.color = pointcloud.material.color;
 				material.uniforms.intensityRange.value = pointcloud.material.uniforms.intensityRange.value;
 				material.elevationRange = pointcloud.material.elevationRange;
 
@@ -799,13 +799,9 @@ export class ProfileWindow extends EventDispatcher {
 				material.intensityContrast = pointcloud.material.intensityContrast;
 				material.intensityBrightness = pointcloud.material.intensityBrightness;
 
-				material.uniforms.wRGB.value = pointcloud.material.uniforms.wRGB.value;
-				material.uniforms.wIntensity.value = pointcloud.material.uniforms.wIntensity.value;
-				material.uniforms.wElevation.value = pointcloud.material.uniforms.wElevation.value;
-				material.uniforms.wClassification.value = pointcloud.material.uniforms.wClassification.value;
-				material.uniforms.wReturnNumber.value = pointcloud.material.uniforms.wReturnNumber.value;
-				material.uniforms.wSourceID.value = pointcloud.material.uniforms.wSourceID.value;
-
+				for (var o in pointcloud.material.colorMixer){
+					material.colorMixer[o] = pointcloud.material.colorMixer[o];
+				}
 			}
 
 			this.pickSphere.visible = true;

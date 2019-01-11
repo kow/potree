@@ -13,7 +13,6 @@ uniform vec3 cameraPosition;
 
 
 uniform mat4 projectionMatrix;
-uniform float uOpacity;
 
 uniform float blendHardness;
 uniform float blendDepthSupplement;
@@ -21,11 +20,10 @@ uniform float fov;
 uniform float uSpacing;
 uniform float near;
 uniform float far;
-uniform float uPCIndex;
 uniform float uScreenWidth;
 uniform float uScreenHeight;
 
-varying vec3	vColor;
+varying vec4	vColor;
 varying float	vLogDepth;
 varying vec3	vViewPosition;
 varying float	vRadius;
@@ -36,8 +34,7 @@ varying vec3 	vPosition;
 float specularStrength = 1.0;
 
 void main() {
-
-	vec3 color = vColor;
+	gl_FragColor = vColor;
 	float depth = gl_FragCoord.z;
 
 	#if defined(circle_point_shape) || defined(paraboloid_point_shape) 
@@ -51,12 +48,6 @@ void main() {
 			discard;
 		}
 	#endif
-		
-	#if defined color_type_point_index
-		gl_FragColor = vec4(color, uPCIndex / 255.0);
-	#else
-		gl_FragColor = vec4(color, uOpacity);
-	#endif
 
 	#if defined paraboloid_point_shape
 		float wi = 0.0 - ( u*u + v*v);
@@ -69,9 +60,9 @@ void main() {
 		depth = (pos.z + 1.0) / 2.0;
 		gl_FragDepthEXT = depth;
 		
-		#if defined(color_type_depth)
-			color.r = linearDepth;
-			color.g = expDepth;
+		#if defined(color_weight_depth)
+			gl_FragColor.r = linearDepth;
+			gl_FragColor.g = expDepth;
 		#endif
 		
 		#if defined(use_edl)
@@ -92,7 +83,6 @@ void main() {
 		gl_FragColor.a = weight;
 		gl_FragColor.xyz = gl_FragColor.xyz * weight;
 	#endif
-	
 }
 
 

@@ -770,27 +770,27 @@ export class PointCloudOctree extends PointCloudTree {
 		}
 
 		// DEBUG: show panel with pick image
-		//{
-		//	let img = Utils.pixelsArrayToImage(buffer, w, h);
-		//	let screenshot = img.src;
-		//
-		//	if(!this.debugDIV){
-		//		this.debugDIV = $(`
-		//			<div id="pickDebug"
-		//			style="position: absolute;
-		//			right: 400px; width: 300px;
-		//			bottom: 44px; width: 300px;
-		//			z-index: 1000;
-		//			"></div>`);
-		//		$(document.body).append(this.debugDIV);
-		//	}
-		//
-		//	this.debugDIV.empty();
-		//	this.debugDIV.append($(`<img src="${screenshot}"
-		//		style="transform: scaleY(-1); width: 300px"/>`));
-		//	//$(this.debugWindow.document).append($(`<img src="${screenshot}"/>`));
-		//	//this.debugWindow.document.write('<img src="'+screenshot+'"/>');
-		//}
+		{
+			let img = Utils.pixelsArrayToImage(buffer, w, h);
+			let screenshot = img.src;
+		
+			if(!this.debugDIV){
+				this.debugDIV = $(`
+					<div id="pickDebug"
+					style="position: absolute;
+					right: 400px; width: 300px;
+					bottom: 44px; width: 300px;
+					z-index: 1000;
+					"></div>`);
+				$(document.body).append(this.debugDIV);
+			}
+		
+			this.debugDIV.empty();
+			this.debugDIV.append($(`<img src="${screenshot}"
+				style="transform: scaleY(-1); width: 300px"/>`));
+			//$(this.debugWindow.document).append($(`<img src="${screenshot}"/>`));
+			//this.debugWindow.document.write('<img src="'+screenshot+'"/>');
+		}
 
 
 		for(let hit of hits){

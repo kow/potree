@@ -93,12 +93,8 @@ uniform float rgbGamma;
 uniform float rgbContrast;
 uniform float rgbBrightness;
 uniform float uTransition;
-uniform float wRGB;
-uniform float wIntensity;
-uniform float wElevation;
-uniform float wClassification;
-uniform float wReturnNumber;
-uniform float wSourceID;
+
+uniform float colorWeights[16];
 
 uniform vec3 uShadowColor;
 
@@ -112,7 +108,7 @@ uniform mat4 uShadowWorldView[num_shadowmaps];
 uniform mat4 uShadowProj[num_shadowmaps];
 #endif
 
-varying vec3	vColor;
+varying vec4	vColor;
 varying float	vLogDepth;
 varying vec3	vViewPosition;
 varying float 	vRadius;
@@ -138,7 +134,7 @@ float round(float number){
 // OCTREE
 // ---------------------
 
-#if (defined(adaptive_point_size) || defined(color_type_lod)) && defined(tree_type_octree)
+#if (defined(adaptive_point_size) || defined(color_weight_lod)) && defined(tree_type_octree)
 /**
  * number of 1-bits up to inclusive index position
  * number is treated as if it were an integer in the range 0-255
@@ -296,7 +292,7 @@ float getPointSizeAttenuation(){
 // KD-TREE
 // ---------------------
 
-#if (defined(adaptive_point_size) || defined(color_type_lod)) && defined(tree_type_kdtree)
+#if (defined(adaptive_point_size) || defined(color_weight_lod)) && defined(tree_type_kdtree)
 
 float getLOD(){
 	vec3 offset = vec3(0.0, 0.0, 0.0);
@@ -446,39 +442,6 @@ vec3 getSourceID(){
 	return texture2D(gradient, vec2(w,1.0 - w)).rgb;
 }
 
-vec3 getCompositeColor(){
-	vec3 c;
-	float w;
-
-	c += wRGB * getRGB();
-	w += wRGB;
-	
-	c += wIntensity * getIntensity() * vec3(1.0, 1.0, 1.0);
-	w += wIntensity;
-	
-	c += wElevation * getElevation();
-	w += wElevation;
-	
-	c += wReturnNumber * getReturnNumber();
-	w += wReturnNumber;
-	
-	c += wSourceID * getSourceID();
-	w += wSourceID;
-	
-	vec4 cl = wClassification * getClassification();
-    c += cl.a * cl.rgb;
-	w += wClassification * cl.a;
-
-	c = c / w;
-	
-	if(w == 0.0){
-		//c = color;
-		gl_Position = vec4(100.0, 100.0, 100.0, 0.0);
-	}
-	
-	return c;
-}
-
 
 // 
 //  ######  ##       #### ########  ########  #### ##    ##  ######   
@@ -492,50 +455,66 @@ vec3 getCompositeColor(){
 
 
 
-vec3 getColor(){
-	vec3 color;
+vec4 getColor(){
+	vec4 color = vec4(uColor, uOpacity);
 	
-	#ifdef color_type_rgb
-		color = getRGB();
-	#elif defined color_type_height
-		color = getElevation();
-	#elif defined color_type_rgb_height
-		vec3 cHeight = getElevation();
-		color = (1.0 - uTransition) * getRGB() + uTransition * cHeight;
-	#elif defined color_type_depth
-		float linearDepth = gl_Position.w;
-		float expDepth = (gl_Position.z / gl_Position.w) * 0.5 + 0.5;
-		color = vec3(linearDepth, expDepth, 0.0);
-	#elif defined color_type_intensity
+	#ifdef color_weight_rgb
+		color.xyz += getRGB() * colorWeights[color_weight_rgb];
+	#endif
+
+	#ifdef color_weight_height
+		color.xyz += getElevation() * colorWeights[color_weight_height];
+	#endif
+
+	#ifdef color_weight_rgb_height
+		color.xyz += ((1.0 - uTransition) * getRGB() + uTransition) * colorWeights[color_weight_rgb_height];
+	#endif
+
+	#ifdef color_weight_depth
+		color.xyz += vec3(gl_Position.w, (gl_Position.z / gl_Position.w) * 0.5 + 0.5, 0.0) * colorWeights[color_weight_depth];
+	#endif
+
+	#ifdef color_weight_intensity
+		color.xyz += vec3(getIntensity() * colorWeights[color_weight_intensity]);
+	#endif
+
+	#ifdef color_weight_gpstime
+		color.xyz += vec3(getGpsTime() * colorWeights[color_weight_gpstime]);
+	#endif
+
+	#ifdef color_weight_intensity_gradient
+	{
 		float w = getIntensity();
-		color = vec3(w, w, w);
-	#elif defined color_type_gpstime
-		float w = getGpsTime();
-		color = vec3(w, w, w);
-	#elif defined color_type_intensity_gradient
-		float w = getIntensity();
-		color = texture2D(gradient, vec2(w,1.0-w)).rgb;
-	#elif defined color_type_color
-		color = uColor;
-	#elif defined color_type_lod
+		color.xyz += texture2D(gradient, vec2(w,1.0-w)).rgb * colorWeights[color_weight_intensity_gradient];
+	}
+	#endif
+
+	#ifdef color_weight_lod
+	{
 		float depth = getLOD();
 		float w = depth / 10.0;
-		color = texture2D(gradient, vec2(w,1.0-w)).rgb;
-	#elif defined color_type_point_index
-		color = indices.rgb;
-	#elif defined color_type_classification
-		vec4 cl = getClassification(); 
-		color = cl.rgb;
-	#elif defined color_type_return_number
-		color = getReturnNumber();
-	#elif defined color_type_source
-		color = getSourceID();
-	#elif defined color_type_normal
-		color = (modelMatrix * vec4(normal, 0.0)).xyz;
-	#elif defined color_type_phong
-		color = color;
-	#elif defined color_type_composite
-		color = getCompositeColor();
+		color.xyz += texture2D(gradient, vec2(w,1.0-w)).rgb * colorWeights[color_weight_lod];
+	}
+	#endif
+
+	#ifdef color_weight_classification
+		color.xyz += getClassification().rgb * colorWeights[color_weight_classification];
+	#endif
+
+	#ifdef color_weight_return_number
+		color.xyz += getReturnNumber() * colorWeights[color_weight_return_number];
+	#endif
+
+	#ifdef color_weight_source
+		color.xyz += getSourceID() * colorWeights[color_weight_source];
+	#endif
+
+	#ifdef color_weight_normal
+		color.xyz += (modelMatrix * vec4(normal, 0.0)).xyz * colorWeights[color_weight_normal];
+	#endif
+
+	#ifdef color_weight_point_index
+		color = vec4(indices.rgb, uPCIndex / 255.) * colorWeights[color_weight_point_index];
 	#endif
 	
 	return color;
@@ -611,16 +590,6 @@ bool pointInClipPolygon(vec3 point, int polyIdx) {
 #endif
 
 void doClipping(){
-
-	#if !defined color_type_composite
-		vec4 cl = getClassification(); 
-		if(cl.a == 0.0){
-			gl_Position = vec4(100.0, 100.0, 100.0, 0.0);
-			
-			return;
-		}
-	#endif
-
 	#if defined(clip_return_number_enabled)
 	{ // return number filter
 		vec2 range = uFilterReturnNumberRange;
@@ -750,10 +719,7 @@ void main() {
 
 			if(distance < 1.0){
 				float w = distance;
-				vec3 cGradient = texture2D(gradient, vec2(w, 1.0 - w)).rgb;
-				
-				vColor = cGradient;
-				//vColor = cGradient * 0.7 + vColor * 0.3;
+				vColor.rgb = texture2D(gradient, vec2(w, 1.0 - w)).rgb;
 			}
 		}
 	#endif
@@ -810,7 +776,7 @@ void main() {
 				//vColor = vec3(0.0, 0.0, 0.2);
 			}else{
 				//vColor = vec3(1.0, 1.0, 1.0) * visibility + vec3(1.0, 1.0, 1.0) * vec3(0.5, 0.0, 0.0) * (1.0 - visibility);
-				vColor = vColor * visibility + vColor * uShadowColor * (1.0 - visibility);
+				vColor.xyz = vColor.xyz * visibility + vColor.xyz * uShadowColor * (1.0 - visibility);
 			}
 		}
 

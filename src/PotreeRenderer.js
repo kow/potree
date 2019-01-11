@@ -406,6 +406,17 @@ class Shader {
 		gl.uniform3f(location, value[0], value[1], value[2]);
 	}
 
+	setUniform4f(name, value) {
+		const gl = this.gl;
+		const location = this.uniformLocations[name];
+		
+		if (location == null) {
+			return;
+		}
+		
+		gl.uniform4fv(location, value);
+	}
+
 	setUniform(name, value) {
 
 		if (value.constructor === THREE.Matrix4) {
@@ -1186,12 +1197,19 @@ export class Renderer {
 			shader.setUniform1f("rgbContrast", material.rgbContrast);
 			shader.setUniform1f("rgbBrightness", material.rgbBrightness);
 			shader.setUniform1f("uTransition", material.transition);
-			shader.setUniform1f("wRGB", material.weightRGB);
-			shader.setUniform1f("wIntensity", material.weightIntensity);
-			shader.setUniform1f("wElevation", material.weightElevation);
-			shader.setUniform1f("wClassification", material.weightClassification);
-			shader.setUniform1f("wReturnNumber", material.weightReturnNumber);
-			shader.setUniform1f("wSourceID", material.weightSourceID);
+			
+			{
+				let weights = new Float32Array(16);
+				let i = 0;
+
+				for (var o in material.colorMixer){
+					if (material.colorMixer[o]){
+						weights[i++] = material.colorMixer[o];
+					}
+				}
+
+				gl.uniform1fv(shader.uniformLocations["colorWeights[0]"], weights);
+			}
 
 			let vnWebGLTexture = this.textures.get(material.visibleNodesTexture);
 			shader.setUniform1i("visibleNodesTexture", currentTextureBindingPoint);
