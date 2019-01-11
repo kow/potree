@@ -166,32 +166,7 @@ int numberOfOnes(int number, int index){
  *
  */
 bool isBitSet(int number, int index){
-
-	// weird multi else if due to lack of proper array, int and bitwise support in WebGL 1.0
-	int powi = 1;
-	if(index == 0){
-		powi = 1;
-	}else if(index == 1){
-		powi = 2;
-	}else if(index == 2){
-		powi = 4;
-	}else if(index == 3){
-		powi = 8;
-	}else if(index == 4){
-		powi = 16;
-	}else if(index == 5){
-		powi = 32;
-	}else if(index == 6){
-		powi = 64;
-	}else if(index == 7){
-		powi = 128;
-	}else{
-		return false;
-	}
-
-	int ndp = number / powi;
-
-	return mod(float(ndp), 2.0) != 0.0;
+	return mod(float(number) / pow(2., float(index)), 2.) > 1.;
 }
 
 
