@@ -668,10 +668,7 @@ export class Renderer {
 
 
 
-	renderNodes(octree, nodes, visibilityTextureData, camera, target, shader, params) {
-
-		if (exports.measureTimings) performance.mark("renderNodes-start");
-
+	renderNode(octree, node, camera, target, shader, params) {
 		let gl = this.gl;
 
 		let material = params.material ? params.material : octree.material;
@@ -681,7 +678,7 @@ export class Renderer {
 
 		let mat4holder = new Float32Array(16);
 
-		let gpsMin = Infinity;
+		/*let gpsMin = Infinity;
 		let gpsMax = -Infinity
 		for (let node of nodes) {
 
@@ -700,52 +697,40 @@ export class Renderer {
 
 			break;
 
-		}
+		}*/
 
-		let i = 0;
-		for (let node of nodes) {
+		var childrenMasking = 0;
 
-			if(exports.debug.allowedNodes !== undefined){
-				if(!exports.debug.allowedNodes.includes(node.name)){
-					continue;
+		{
+			let centerBoundingBox = (bb) => {
+				return {
+					x: (bb.min.x + bb.max.x) / 2,
+					y: (bb.min.y + bb.max.y) / 2,
+					z: (bb.min.z + bb.max.z) / 2
 				}
 			}
 
-			//if(![
-			//	"r42006420226",
-			//	]
-			//	.includes(node.name)){
-			//	continue;
-			//}
+			let int = (val, s) => (val ? 1 : 0) << s;
 
+			for (var ii = 0; ii < 8; ii++){
+				if (node.children[ii] && node.children[ii].isLoaded()){
+					var child = node.children[ii];
+					//because node.chlidren is unordered (why?) I need to find out which quadent this belongs to
+					var bb = centerBoundingBox(node.getBoundingBox());
+					var cbb = centerBoundingBox(child.getBoundingBox());
+
+					childrenMasking |= 1 << (int(bb.x < cbb.x, 0) | int(bb.y < cbb.y, 1) | int(bb.z < cbb.z, 2));
+				}
+			}
+		}
+
+		//render this node
+		if (node.geometryNode && childrenMasking != 255){
 			let world = node.sceneNode.matrixWorld;
 			worldView.multiplyMatrices(view, world);
-			//this.multiplyViewWithScaleTrans(view, world, worldView);
-
-			if (visibilityTextureData) {
-				let vnStart = visibilityTextureData.offsets.get(node);
-				shader.setUniform1f("uVNStart", vnStart);
-			}
-
 
 			let level = node.getLevel();
 
-			if(node.debug){
-				shader.setUniform("uDebug", true);
-			}else{
-				shader.setUniform("uDebug", false);
-			}
-
-			let isLeaf;
-			if(node instanceof PointCloudOctreeNode){
-				isLeaf = Object.keys(node.children).length === 0;
-			}else if(node instanceof PointCloudArena4DNode){
-				isLeaf = node.geometryNode.isLeaf;
-			}
-			shader.setUniform("uIsLeafNode", isLeaf);
-
-
-			// TODO consider passing matrices in an array to avoid uniformMatrix4fv overhead
 			const lModel = shader.uniformLocations["modelMatrix"];
 			if (lModel) {
 				mat4holder.set(world.elements);
@@ -753,14 +738,71 @@ export class Renderer {
 			}
 
 			const lModelView = shader.uniformLocations["modelViewMatrix"];
-			//mat4holder.set(worldView.elements);
-			// faster then set in chrome 63
-			for(let j = 0; j < 16; j++){
+			for (let j = 0; j < 16; j++){
 				mat4holder[j] = worldView.elements[j];
 			}
+
 			gl.uniformMatrix4fv(lModelView, false, mat4holder);
 
-			{ // Clip Polygons
+			var bb = node.getBoundingBox();
+
+			shader.setUniform1f("uLevel", level);
+			shader.setUniform3f("minBounding", bb.min.x, bb.min.y, bb.min.z);
+			shader.setUniform3f("maxBounding", bb.max.x, bb.max.y, bb.max.z);
+			shader.setUniform1f("setChildren", childrenMasking);
+			//shader.setUniform1f("uPCIndex", i);
+
+			let geometry = node.geometryNode.geometry;
+
+			/*if(node.geometryNode.gpsTime){
+				let nodeMin = node.geometryNode.gpsTime.offset;
+				let nodeMax = nodeMin + node.geometryNode.gpsTime.range;
+
+				let gpsOffset = (+nodeMin - gpsMin);
+				let gpsRange = (gpsMax - gpsMin);
+
+				shader.setUniform1f("uGPSOffset", gpsOffset);
+				shader.setUniform1f("uGPSRange", gpsRange);
+			}*/
+
+			{
+				//let uFilterGPSTimeClipRange = material.uniforms.uFilterGPSTimeClipRange.value;
+				
+				//let gpsCliPRangeMin = uFilterGPSTimeClipRange[0] - gpsMin;
+				//let gpsCliPRangeMax = uFilterGPSTimeClipRange[1] - gpsMin;
+				
+				shader.setUniform2f("uFilterReturnNumberRange", material.uniforms.uFilterReturnNumberRange.value);
+				shader.setUniform2f("uFilterNumberOfReturnsRange", material.uniforms.uFilterNumberOfReturnsRange.value);
+				//shader.setUniform2f("uFilterGPSTimeClipRange", [gpsCliPRangeMin, gpsCliPRangeMax]);
+			}
+
+			let webglBuffer = null;
+			if(!this.buffers.has(geometry)){
+				webglBuffer = this.createBuffer(geometry);
+				this.buffers.set(geometry, webglBuffer);
+			}else{
+				webglBuffer = this.buffers.get(geometry);
+				for(let attributeName in geometry.attributes){
+					let attribute = geometry.attributes[attributeName];
+
+					if(attribute.version > webglBuffer.vbos.get(attributeName).version){
+						this.updateBuffer(geometry);
+					}
+				}
+			}
+
+			gl.bindVertexArray(webglBuffer.vao);
+			gl.drawArrays(gl.POINTS, 0, webglBuffer.numElements);
+		}
+		
+		for (var i = 0; i < 8; i++){
+			if (node.children[i]){
+				this.renderNode(octree, node.children[i], camera, target, shader, params);
+			}
+		}
+
+
+			/*{ // Clip Polygons
 				if(material.clipPolygons && material.clipPolygons.length > 0){
 
 					let clipPolygonVCount = [];
@@ -799,18 +841,11 @@ export class Renderer {
 					gl.uniform3fv(lClipPolygons, flattenedVertices);
 
 				}
-			}
+			}*/
 
-
-			//shader.setUniformMatrix4("modelMatrix", world);
-			//shader.setUniformMatrix4("modelViewMatrix", worldView);
-			shader.setUniform1f("uLevel", level);
-			shader.setUniform1f("uNodeSpacing", node.geometryNode.estimatedSpacing);
-
-			shader.setUniform1f("uPCIndex", i);
 			// uBBSize
 
-			if (shadowMaps.length > 0) {
+			/*if (shadowMaps.length > 0) {
 
 				const lShadowMap = shader.uniformLocations["uShadowMap[0]"];
 
@@ -845,66 +880,10 @@ export class Renderer {
 					const lProj = shader.uniformLocations["uShadowProj[0]"];
 					gl.uniformMatrix4fv(lProj, false, flattenedMatrices);
 				}
-			}
-
-			let geometry = node.geometryNode.geometry;
-
-			if(node.geometryNode.gpsTime){
-				let nodeMin = node.geometryNode.gpsTime.offset;
-				let nodeMax = nodeMin + node.geometryNode.gpsTime.range;
-
-				let gpsOffset = (+nodeMin - gpsMin);
-				let gpsRange = (gpsMax - gpsMin);
-
-				shader.setUniform1f("uGPSOffset", gpsOffset);
-				shader.setUniform1f("uGPSRange", gpsRange);
-			}
-
-			{
-				let uFilterReturnNumberRange = material.uniforms.uFilterReturnNumberRange.value;
-				let uFilterNumberOfReturnsRange = material.uniforms.uFilterNumberOfReturnsRange.value;
-				let uFilterGPSTimeClipRange = material.uniforms.uFilterGPSTimeClipRange.value;
-				
-				let gpsCliPRangeMin = uFilterGPSTimeClipRange[0] - gpsMin;
-				let gpsCliPRangeMax = uFilterGPSTimeClipRange[1] - gpsMin;
-				
-				shader.setUniform2f("uFilterReturnNumberRange", uFilterReturnNumberRange);
-				shader.setUniform2f("uFilterNumberOfReturnsRange", uFilterNumberOfReturnsRange);
-				shader.setUniform2f("uFilterGPSTimeClipRange", [gpsCliPRangeMin, gpsCliPRangeMax]);
-			}
-
-			let webglBuffer = null;
-			if(!this.buffers.has(geometry)){
-				webglBuffer = this.createBuffer(geometry);
-				this.buffers.set(geometry, webglBuffer);
-			}else{
-				webglBuffer = this.buffers.get(geometry);
-				for(let attributeName in geometry.attributes){
-					let attribute = geometry.attributes[attributeName];
-
-					if(attribute.version > webglBuffer.vbos.get(attributeName).version){
-						this.updateBuffer(geometry);
-					}
-				}
-			}
-
-			gl.bindVertexArray(webglBuffer.vao);
-
-			let numPoints = webglBuffer.numElements;
-			gl.drawArrays(gl.POINTS, 0, numPoints);
-
-			i++;
-		}
-
-		gl.bindVertexArray(null);
-
-		if (exports.measureTimings) {
-			performance.mark("renderNodes-end");
-			performance.measure("render.renderNodes", "renderNodes-start", "renderNodes-end");
-		}
+			}*/
 	}
 
-	renderOctree(octree, nodes, camera, target, params = {}){
+	renderOctree(octree, camera, target, params = {}){
 
 		let gl = this.gl;
 
@@ -917,24 +896,6 @@ export class Renderer {
 		let worldView = new THREE.Matrix4();
 
 		let shader = null;
-		let visibilityTextureData = null;
-
-		let currentTextureBindingPoint = 0;
-
-		if (material.pointSizeType >= 0) {
-			if (material.pointSizeType === PointSizeType.ADAPTIVE ||
-				material.pointColorType === PointColorType.LOD) {
-
-				let vnNodes = (params.vnTextureNodes != null) ? params.vnTextureNodes : nodes;
-				visibilityTextureData = octree.computeVisibilityTextureData(vnNodes, camera);
-
-				const vnt = material.visibleNodesTexture;
-				const data = vnt.image.data;
-				data.set(visibilityTextureData.data);
-				vnt.needsUpdate = true;
-
-			}
-		}
 
 		{ // UPDATE SHADER AND TEXTURES
 			if (!this.shaders.has(material)) {
@@ -1211,11 +1172,7 @@ export class Renderer {
 				gl.uniform1fv(shader.uniformLocations["colorWeights[0]"], weights);
 			}
 
-			let vnWebGLTexture = this.textures.get(material.visibleNodesTexture);
-			shader.setUniform1i("visibleNodesTexture", currentTextureBindingPoint);
-			gl.activeTexture(gl.TEXTURE0 + currentTextureBindingPoint);
-			gl.bindTexture(vnWebGLTexture.target, vnWebGLTexture.id);
-			currentTextureBindingPoint++;
+			let currentTextureBindingPoint = 0;
 
 			let gradientTexture = this.textures.get(material.gradientTexture);
 			shader.setUniform1i("gradient", currentTextureBindingPoint);
@@ -1292,7 +1249,7 @@ export class Renderer {
 			}
 		}
 
-		this.renderNodes(octree, nodes, visibilityTextureData, camera, target, shader, params);
+		this.renderNode(octree, octree.root, camera, target, shader, params);
 
 		gl.activeTexture(gl.TEXTURE2);
 		gl.bindTexture(gl.TEXTURE_2D, null);
@@ -1312,23 +1269,19 @@ export class Renderer {
 
 		const traversalResult = this.traverse(scene);
 
-
 		// RENDER
 		for (const octree of traversalResult.octrees) {
-			let nodes = octree.visibleNodes;
-			this.renderOctree(octree, nodes, camera, target, params);
+			this.renderOctree(octree, camera, target, params);
 		}
 
 
 		// CLEANUP
+		gl.bindVertexArray(null);
 		gl.activeTexture(gl.TEXTURE1);
 		gl.bindTexture(gl.TEXTURE_2D, null)
 
 		this.threeRenderer.state.reset();
 	}
-
-
-
 };
 
 

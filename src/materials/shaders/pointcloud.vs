@@ -22,14 +22,17 @@ uniform mat4 projectionMatrix;
 uniform mat4 viewMatrix;
 uniform mat4 uViewInv;
 
+uniform vec3 minBounding, maxBounding;
+uniform float setChildren;
+
+uniform float nodeLevel;
+
 uniform float uScreenWidth;
 uniform float uScreenHeight;
 uniform float fov;
 uniform float near;
 uniform float far;
 uniform float nearPlaneHeight;
-
-uniform bool uDebug;
 
 uniform bool uUseOrthographicCamera;
 uniform float uOrthoWidth;
@@ -71,8 +74,6 @@ uniform float uNodeSpacing;
 uniform float uOctreeSize;
 uniform vec3 uBBSize;
 uniform float uLevel;
-uniform float uVNStart;
-uniform bool uIsLeafNode;
 
 uniform vec3 uColor;
 uniform float uOpacity;
@@ -136,123 +137,14 @@ float round(float number){
 
 #if (defined(adaptive_point_size) || defined(color_weight_lod)) && defined(tree_type_octree)
 /**
- * number of 1-bits up to inclusive index position
- * number is treated as if it were an integer in the range 0-255
- *
- */
-int numberOfOnes(int number, int index){
-	int numOnes = 0;
-	int tmp = 128;
-	for(int i = 7; i >= 0; i--){
-		
-		if(number >= tmp){
-			number = number - tmp;
-
-			if(i <= index){
-				numOnes++;
-			}
-		}
-		
-		tmp = tmp / 2;
-	}
-
-	return numOnes;
-}
-
-
-/**
- * checks whether the bit at index is 1
- * number is treated as if it were an integer in the range 0-255
- *
- */
-bool isBitSet(int number, int index){
-	return mod(float(number) / pow(2., float(index)), 2.) > 1.;
-}
-
-
-/**
  * find the LOD at the point position
  */
 float getLOD(){
-	
-	vec3 offset = vec3(0.0, 0.0, 0.0);
-	int iOffset = int(uVNStart);
-	float depth = uLevel;
-	for(float i = 0.0; i <= 30.0; i++){
-		float nodeSizeAtLevel = uOctreeSize  / pow(2.0, i + uLevel + 0.0);
-		
-		vec3 index3d = (position-offset) / nodeSizeAtLevel;
-		index3d = floor(index3d + 0.5);
-		int index = int(round(4.0 * index3d.x + 2.0 * index3d.y + index3d.z));
-		
-		vec4 value = texture2D(visibleNodes, vec2(float(iOffset) / 2048.0, 0.0));
-		int mask = int(round(value.r * 255.0));
-
-		if(isBitSet(mask, index)){
-			// there are more visible child nodes at this position
-			int advanceG = int(round(value.g * 255.0)) * 256;
-			int advanceB = int(round(value.b * 255.0));
-			int advanceChild = numberOfOnes(mask, index - 1);
-			int advance = advanceG + advanceB + advanceChild;
-
-			iOffset = iOffset + advance;
-			
-			depth++;
-		}else{
-			// no more visible child nodes at this position
-			return value.a * 255.0;
-			//return depth;
-		}
-		
-		offset = offset + (vec3(1.0, 1.0, 1.0) * nodeSizeAtLevel * 0.5) * index3d;
-	}
-		
-	return depth;
+	return uLevel;
 }
 
 float getSpacing(){
-	vec3 offset = vec3(0.0, 0.0, 0.0);
-	int iOffset = int(uVNStart);
-	float depth = uLevel;
-	float spacing = uNodeSpacing;
-	for(float i = 0.0; i <= 30.0; i++){
-		float nodeSizeAtLevel = uOctreeSize  / pow(2.0, i + uLevel + 0.0);
-		
-		vec3 index3d = (position-offset) / nodeSizeAtLevel;
-		index3d = floor(index3d + 0.5);
-		int index = int(round(4.0 * index3d.x + 2.0 * index3d.y + index3d.z));
-		
-		vec4 value = texture2D(visibleNodes, vec2(float(iOffset) / 2048.0, 0.0));
-		int mask = int(round(value.r * 255.0));
-		float spacingFactor = value.a;
-
-		if(i > 0.0){
-			spacing = spacing / (255.0 * spacingFactor);
-		}
-		
-
-		if(isBitSet(mask, index)){
-			// there are more visible child nodes at this position
-			int advanceG = int(round(value.g * 255.0)) * 256;
-			int advanceB = int(round(value.b * 255.0));
-			int advanceChild = numberOfOnes(mask, index - 1);
-			int advance = advanceG + advanceB + advanceChild;
-
-			iOffset = iOffset + advance;
-
-			//spacing = spacing / (255.0 * spacingFactor);
-			//spacing = spacing / 3.0;
-			
-			depth++;
-		}else{
-			// no more visible child nodes at this position
-			return spacing;
-		}
-		
-		offset = offset + (vec3(1.0, 1.0, 1.0) * nodeSizeAtLevel * 0.5) * index3d;
-	}
-		
-	return spacing;
+	return uNodeSpacing;
 }
 
 float getPointSizeAttenuation(){
@@ -513,7 +405,7 @@ float getPointSize(){
 			//pointSize = pointSize * projFactor;
 		}
 	#elif defined adaptive_point_size
-		pointSize = size * 5. * nearPlaneHeight / gl_Position.w / pow(2., getLOD());
+		pointSize = size * 0.1 * nearPlaneHeight / gl_Position.w / pow(2., getLOD());
 	#endif
 
 	pointSize = max(minSize, pointSize);
@@ -664,6 +556,7 @@ void main() {
 	gl_Position = projectionMatrix * mvPosition;
 	vLogDepth = log2(-mvPosition.z);
 
+
 	// POINT SIZE
 	float pointSize = getPointSize();
 	gl_PointSize = pointSize;
@@ -671,6 +564,14 @@ void main() {
 
 	// COLOR
 	vColor = getColor();
+
+	//LOD CLIPPING clip lowel detail points if higher detail ponts are going to render there
+	{
+		vec3 pos = position / 600. * pow(2., uLevel);
+		int bit = int(pos.x >= .5) + int(pos.y >= .5) * 2 + int(pos.z >= .5) * 4;
+
+		if (mod(setChildren / pow(2., float(bit)), 2.) >= 1.) gl_Position = vec4(100.0, 100.0, 100.0, 0.0);
+	}
 
 
 	#if defined hq_depth_pass
@@ -756,13 +657,4 @@ void main() {
 		}
 
 	#endif
-
-	//vColor = vec3(1.0, 0.0, 0.0);
-
-	//if(uDebug){
-	//	vColor.b = (vColor.r + vColor.g + vColor.b) / 3.0;
-	//	vColor.r = 1.0;
-	//	vColor.g = 1.0;
-	//}
-
 }
