@@ -770,7 +770,7 @@ export class PointCloudOctree extends PointCloudTree {
 		}
 
 		// DEBUG: show panel with pick image
-		{
+		/*{
 			let img = Utils.pixelsArrayToImage(buffer, w, h);
 			let screenshot = img.src;
 		
@@ -790,7 +790,7 @@ export class PointCloudOctree extends PointCloudTree {
 				style="transform: scaleY(-1); width: 300px"/>`));
 			//$(this.debugWindow.document).append($(`<img src="${screenshot}"/>`));
 			//this.debugWindow.document.write('<img src="'+screenshot+'"/>');
-		}
+		}*/
 
 
 		for(let hit of hits){
