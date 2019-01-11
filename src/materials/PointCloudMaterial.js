@@ -142,7 +142,7 @@ export class PointCloudMaterial extends THREE.RawShaderMaterial {
 			"return_number": 0,
 			"source": 0,
 			"normal": 0,
-		}
+		};
 
 		this.classification = ClassificationScheme.DEFAULT;
 
@@ -158,8 +158,8 @@ export class PointCloudMaterial extends THREE.RawShaderMaterial {
 		//	this.fragmentShader = this.getDefines() + Shaders['pointcloud.fs'];
 		//}
 
-		this.vertexShader = Shaders['pointcloud.vs'];
-		this.fragmentShader = Shaders['pointcloud.fs'];
+		this.vertexShader = this.getDefines() + Shaders['pointcloud.vs'];
+		this.fragmentShader = this.getDefines() + Shaders['pointcloud.fs'];
 
 		
 		this.vertexColors = THREE.VertexColors;
