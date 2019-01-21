@@ -77,7 +77,24 @@ export class GreyhoundBinaryLoader{
 				let buffer = buffers[property].buffer;
 
 				if (parseInt(property) === PointAttributeNames.POSITION_CARTESIAN) {
-					geometry.addAttribute('position', new THREE.BufferAttribute(new Float32Array(buffer), 3));
+					buffer = new Float32Array(buffer);
+
+					//normalize geometry to 0 - 1
+					{
+						let min = node.boundingBox.min;
+						let max = node.boundingBox.max;
+
+						let off = [0, 0, 0]
+						let size = [max.x - min.x, max.y - min.y, max.z - min.z];
+						
+						for (let i = 0; i < buffer.length; i += 3){
+							buffer[i + 0] = (buffer[i + 0] - off[0]) / size[0];
+							buffer[i + 1] = (buffer[i + 1] - off[1]) / size[1];
+							buffer[i + 2] = (buffer[i + 2] - off[2]) / size[2];
+						}
+					}
+
+					geometry.addAttribute('position', new THREE.BufferAttribute(buffer, 3));
 				} else if (parseInt(property) === PointAttributeNames.COLOR_PACKED) {
 					geometry.addAttribute('color', new THREE.BufferAttribute(new Uint8Array(buffer), 4, true));
 				} else if (parseInt(property) === PointAttributeNames.INTENSITY) {

@@ -1442,23 +1442,8 @@ export class Viewer extends EventDispatcher{
 			//	}
 			//}
 
-			if(result.lowestSpacing !== Infinity){
-				let near = result.lowestSpacing * 10.0;
-				let far = -this.getBoundingBox().applyMatrix4(camera.matrixWorldInverse).min.z;
-
-				far = Math.max(far * 1.5, 1000);
-				near = Math.min(100.0, Math.max(0.01, near));
-				far = Math.max(far, near + 1000);
-
-				if(near === Infinity){
-					near = 0.1;
-				}
-				
-				camera.near = near;
-				camera.far = far;
-			}else{
-				// don't change near and far in this case
-			}
+			camera.near = 0.1;
+			camera.far = 10000;
 
 			if(this.scene.cameraMode == CameraMode.ORTHOGRAPHIC) {
 				camera.near = -camera.far;

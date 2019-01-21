@@ -668,12 +668,11 @@ export class Renderer {
 
 
 
-	renderNode(octree, node, camera, target, shader, params) {
+	renderNode(octree, node, transform, target, shader, params) {
 		let gl = this.gl;
 
 		let material = params.material ? params.material : octree.material;
 		let shadowMaps = params.shadowMaps == null ? [] : params.shadowMaps;
-		let view = camera.matrixWorldInverse;
 		let worldView = new THREE.Matrix4();
 
 		let mat4holder = new Float32Array(16);
@@ -700,55 +699,29 @@ export class Renderer {
 		}*/
 
 		var childrenMasking = 0;
+		var children = [null, null, null, null, null, null, null, null];
+		let level = node.getLevel();
 
-		{
-			let centerBoundingBox = (bb) => {
-				return {
-					x: (bb.min.x + bb.max.x) / 2,
-					y: (bb.min.y + bb.max.y) / 2,
-					z: (bb.min.z + bb.max.z) / 2
-				}
-			}
+		for (var ii = 0; ii < 8; ii++){
+			if (node.children[ii] && node.children[ii].geometryNode){
+				let index = (ii & 2) | ((ii & 1) << 2) | ((ii & 4) >> 2);
 
-			let int = (val, s) => (val ? 1 : 0) << s;
-
-			for (var ii = 0; ii < 8; ii++){
-				if (node.children[ii] && node.children[ii].isLoaded()){
-					var child = node.children[ii];
-					//because node.chlidren is unordered (why?) I need to find out which quadent this belongs to
-					var bb = centerBoundingBox(node.getBoundingBox());
-					var cbb = centerBoundingBox(child.getBoundingBox());
-
-					childrenMasking |= 1 << (int(bb.x < cbb.x, 0) | int(bb.y < cbb.y, 1) | int(bb.z < cbb.z, 2));
-				}
+				childrenMasking |= 1 << index;
+				children[index] = node.children[ii];
 			}
 		}
 
 		//render this node
 		if (node.geometryNode && childrenMasking != 255){
-			let world = node.sceneNode.matrixWorld;
-			worldView.multiplyMatrices(view, world);
-
-			let level = node.getLevel();
-
-			const lModel = shader.uniformLocations["modelMatrix"];
+			/*const lModel = shader.uniformLocations["modelMatrix"];
 			if (lModel) {
 				mat4holder.set(world.elements);
 				gl.uniformMatrix4fv(lModel, false, mat4holder);
-			}
+			}*/
 
-			const lModelView = shader.uniformLocations["modelViewMatrix"];
-			for (let j = 0; j < 16; j++){
-				mat4holder[j] = worldView.elements[j];
-			}
-
-			gl.uniformMatrix4fv(lModelView, false, mat4holder);
-
-			var bb = node.getBoundingBox();
+			gl.uniformMatrix4fv(shader.uniformLocations["modelViewMatrix"], false, transform.elements);
 
 			shader.setUniform1f("uLevel", level);
-			shader.setUniform3f("minBounding", bb.min.x, bb.min.y, bb.min.z);
-			shader.setUniform3f("maxBounding", bb.max.x, bb.max.y, bb.max.z);
 			shader.setUniform1f("setChildren", childrenMasking);
 			//shader.setUniform1f("uPCIndex", i);
 
@@ -794,10 +767,14 @@ export class Renderer {
 			gl.bindVertexArray(webglBuffer.vao);
 			gl.drawArrays(gl.POINTS, 0, webglBuffer.numElements);
 		}
-		
-		for (var i = 0; i < 8; i++){
-			if (node.children[i]){
-				this.renderNode(octree, node.children[i], camera, target, shader, params);
+
+		if (childrenMasking != 0) for (var i = 0; i < 8; i++){
+			if (children[i]){
+				var matrix = transform.clone();
+				matrix.scale(new THREE.Vector3(0.5, 0.5, 0.5));
+				matrix.multiply(new THREE.Matrix4().makeTranslation(i & 1, (i & 2) >> 1, (i & 4) >> 2));
+
+				this.renderNode(octree, children[i], matrix, target, shader, params);
 			}
 		}
 
@@ -1111,25 +1088,12 @@ export class Renderer {
 				//gl.uniformMatrix4fv(lClipSpheres, false, material.uniforms.clipSpheres.value);
 			}
 
-			if(Potree.Features.WEBGL2.isSupported()){
-				let buffer = new ArrayBuffer(12);
-				let bufferf32 = new Float32Array(buffer);
-				bufferf32[0] = material.size;
-				bufferf32[1] = material.uniforms.minSize.value;
-				bufferf32[2] = material.uniforms.maxSize.value;
+			{
+				let m = Math.min(screenWidth, screenHeight) / 500;
 
-				let block = shader.uniformBlocks["ubo_point"];
-
-				gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, block.buffer);
-
-				gl.bindBuffer(gl.UNIFORM_BUFFER, block.buffer);
-				gl.bufferSubData(gl.UNIFORM_BUFFER, 0, buffer);
-				gl.bindBuffer(gl.UNIFORM_BUFFER, null);
-				
-			}else{
-				shader.setUniform1f("size", material.size);
-				shader.setUniform1f("maxSize", material.uniforms.maxSize.value);
-				shader.setUniform1f("minSize", material.uniforms.minSize.value);
+				shader.setUniform1f("size", material.size * m);
+				shader.setUniform1f("maxSize", material.uniforms.maxSize.value * m);
+				shader.setUniform1f("minSize", material.uniforms.minSize.value * m);
 			}
 
 
@@ -1248,8 +1212,15 @@ export class Renderer {
 
 			}
 		}
+		
+		if (octree.root.sceneNode){
+			var matrix = new THREE.Matrix4();
+			matrix.multiplyMatrices(camera.matrixWorldInverse, octree.root.sceneNode.matrixWorld)
 
-		this.renderNode(octree, octree.root, camera, target, shader, params);
+			matrix.scale(octree.root.pointcloud.boundingBox.max);
+
+			this.renderNode(octree, octree.root, matrix, target, shader, params);
+		}
 
 		gl.activeTexture(gl.TEXTURE2);
 		gl.bindTexture(gl.TEXTURE_2D, null);

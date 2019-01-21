@@ -22,7 +22,6 @@ uniform mat4 projectionMatrix;
 uniform mat4 viewMatrix;
 uniform mat4 uViewInv;
 
-uniform vec3 minBounding, maxBounding;
 uniform float setChildren;
 
 uniform float nodeLevel;
@@ -128,17 +127,8 @@ float round(float number){
 // ######### ##     ## ######### ##           ##     ##   ##   ##  ##                ##  ##    ##     ##             ## 
 // ##     ## ##     ## ##     ## ##           ##     ##    ## ##   ##          ##    ##  ##   ##      ##       ##    ## 
 // ##     ## ########  ##     ## ##           ##    ####    ###    ########     ######  #### ######## ########  ######  
-// 																			
-
-
-// ---------------------
-// OCTREE
-// ---------------------
-
-#if (defined(adaptive_point_size) || defined(color_weight_lod)) && defined(tree_type_octree)
-/**
- * find the LOD at the point position
- */
+//
+																	
 float getLOD(){
 	return uLevel;
 }
@@ -150,10 +140,6 @@ float getSpacing(){
 float getPointSizeAttenuation(){
 	return pow(2.0, getLOD());
 }
-
-
-#endif
-
 
 // ---------------------
 // KD-TREE
@@ -396,7 +382,7 @@ float getPointSize(){
 	float r = uOctreeSpacing * 1.7;
 	vRadius = r;
 	#if defined fixed_point_size
-		pointSize = size;
+		pointSize = 0;
 	#elif defined attenuated_point_size
 		if(uUseOrthographicCamera){
 			pointSize = size;
@@ -405,7 +391,7 @@ float getPointSize(){
 			//pointSize = pointSize * projFactor;
 		}
 	#elif defined adaptive_point_size
-		pointSize = size * 0.1 * nearPlaneHeight / gl_Position.w / pow(2., getLOD());
+		pointSize = size * nearPlaneHeight / gl_Position.w / pow(2., getLOD());
 	#endif
 
 	pointSize = max(minSize, pointSize);
@@ -567,8 +553,8 @@ void main() {
 
 	//LOD CLIPPING clip lowel detail points if higher detail ponts are going to render there
 	{
-		vec3 pos = position / 600. * pow(2., uLevel);
-		int bit = int(pos.x >= .5) + int(pos.y >= .5) * 2 + int(pos.z >= .5) * 4;
+		//vColor = vec4(position, 1);
+		int bit = int(position.x >= .5) + int(position.y >= .5) * 2 + int(position.z >= .5) * 4;
 
 		if (mod(setChildren / pow(2., float(bit)), 2.) >= 1.) gl_Position = vec4(100.0, 100.0, 100.0, 0.0);
 	}

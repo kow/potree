@@ -221,7 +221,7 @@ export class EDLRenderer{
 
 			material.screenWidth = width;
 			material.screenHeight = height;
-			material.uniforms.visibleNodes.value = pointcloud.material.visibleNodesTexture;
+			//material.uniforms.visibleNodes.value = pointcloud.material.visibleNodesTexture;
 			material.uniforms.octreeSize.value = octreeSize;
 			material.spacing = pointcloud.pcoGeometry.spacing * Math.max(pointcloud.scale.x, pointcloud.scale.y, pointcloud.scale.z);
 		}

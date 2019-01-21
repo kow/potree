@@ -1,8 +1,4 @@
 
-#if defined paraboloid_point_shape
-	#extension GL_EXT_frag_depth : enable
-#endif
-
 precision highp float;
 precision highp int;
 
@@ -37,29 +33,8 @@ void main() {
 		if (length (gl_PointCoord * 2. - 1.) > 1.) discard;
 	#endif
 
-	#if defined paraboloid_point_shape
-		float wi = 0.0 - pow(length (gl_PointCoord * 2. - 1.), 2.);
-		vec4 pos = vec4(vViewPosition, 1.0);
-		pos.z += wi * vRadius;
-		float linearDepth = -pos.z;
-		pos = projectionMatrix * pos;
-		pos = pos / pos.w;
-		float expDepth = pos.z;
-		gl_FragDepthEXT = (pos.z + 1.0) / 2.0;
-		
-		#if defined(color_weight_depth)
-			gl_FragColor.r = linearDepth;
-			gl_FragColor.g = expDepth;
-		#endif
-		
-		#if defined(use_edl)
-			gl_FragColor.a = log2(linearDepth);
-		#endif
-		
-	#else
-		#if defined(use_edl)
-			gl_FragColor.a = vLogDepth;
-		#endif
+	#if defined(use_edl)
+		gl_FragColor.a = vLogDepth;
 	#endif
 
 	#if defined(weighted_splats)

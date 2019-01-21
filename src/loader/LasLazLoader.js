@@ -185,6 +185,26 @@ export class LasLazBatcher{
 			let numPoints = lasBuffer.pointsCount;
 
 			let positions = new Float32Array(e.data.position);
+
+			//normalize geometry to 0 - 1
+			{
+				let min = node.boundingBox.min;
+				let max = node.boundingBox.max;
+
+				let off = [0, 0, 0]
+				let size = [max.x - min.x, max.y - min.y, max.z - min.z];
+
+				for (let i = 0; i < positions.length; i += 3){
+					let x = positions[i + 0];
+					let y = positions[i + 1];
+					let z = positions[i + 2];
+
+					positions[i + 0] = (x - off[0]) / size[0];
+					positions[i + 1] = (y - off[1]) / size[1];
+					positions[i + 2] = (z - off[2]) / size[2];
+				}
+			}
+
 			let colors = new Uint8Array(e.data.color);
 			let intensities = new Float32Array(e.data.intensity);
 			let classifications = new Uint8Array(e.data.classification);
@@ -204,13 +224,8 @@ export class LasLazBatcher{
 			geometry.addAttribute('indices', new THREE.BufferAttribute(indices, 4));
 			geometry.attributes.indices.normalized = true;
 
-			let tightBoundingBox = new THREE.Box3(
-				new THREE.Vector3().fromArray(e.data.tightBoundingBox.min),
-				new THREE.Vector3().fromArray(e.data.tightBoundingBox.max)
-			);
-
-			geometry.boundingBox = this.node.boundingBox;
-			this.node.tightBoundingBox = tightBoundingBox;
+			geometry.boundingBox = node.boundingBox;
+			this.node.tightBoundingBox = new THREE.Box3(new THREE.Vector3(0, 0, 0), new THREE.Vector3(1, 1, 1));
 
 			this.node.geometry = geometry;
 			this.node.numPoints = numPoints;

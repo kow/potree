@@ -19,10 +19,6 @@ export class PointCloudMaterial extends THREE.RawShaderMaterial {
 	constructor (parameters = {}) {
 		super();
 
-		this.visibleNodesTexture = Utils.generateDataTexture(2048, 1, new THREE.Color(0xffffff));
-		this.visibleNodesTexture.minFilter = THREE.NearestFilter;
-		this.visibleNodesTexture.magFilter = THREE.NearestFilter;
-
 		let getValid = (a, b) => {
 			if(a !== undefined){
 				return a;
@@ -36,8 +32,8 @@ export class PointCloudMaterial extends THREE.RawShaderMaterial {
 		let maxSize = getValid(parameters.maxSize, 50.0);
 		let treeType = getValid(parameters.treeType, TreeType.OCTREE);
 
-		this._pointSizeType = PointSizeType.FIXED;
-		this._shape = PointShape.SQUARE;
+		this._pointSizeType = PointSizeType.ADAPTIVE;
+		this._shape = PointShape.CIRCILE;
 		this._useClipBox = false;
 		this.clipBoxes = [];
 		//this.clipSpheres = [];
@@ -97,7 +93,6 @@ export class PointCloudMaterial extends THREE.RawShaderMaterial {
 			clipPolygonVCount:	{ type: "iv", value: [] },
 			clipPolygonVP:		{ type: "Matrix4fv", value: [] },
 
-			visibleNodes:		{ type: "t", value: this.visibleNodesTexture },
 			pcIndex:			{ type: "f", value: 0 },
 			gradient:			{ type: "t", value: this.gradientTexture },
 			classificationLUT:	{ type: "t", value: this.classificationTexture },
