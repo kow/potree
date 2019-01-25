@@ -708,7 +708,7 @@ export class PointCloudOctree extends PointCloudTree {
 			let tmp = this.material;
 			this.material = pickMaterial;
 
-			pRenderer.renderOctree(this, nodes, camera, pickState.renderTarget);
+			pRenderer.renderOctree(this, camera, pickState.renderTarget, {nodeList: nodes});
 
 			this.material = tmp;
 		}
@@ -807,10 +807,13 @@ export class PointCloudOctree extends PointCloudTree {
 			for(let attributeName in geometry.attributes){
 				let attribute = geometry.attributes[attributeName];
 
+				let bb = node.geometryNode.boundingBox;
+				let size = [bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z];
+
 				if (attributeName === 'position') {
-					let x = attribute.array[3 * hit.pIndex + 0];
-					let y = attribute.array[3 * hit.pIndex + 1];
-					let z = attribute.array[3 * hit.pIndex + 2];
+					let x = attribute.array[3 * hit.pIndex + 0] * size[0];
+					let y = attribute.array[3 * hit.pIndex + 1] * size[1];
+					let z = attribute.array[3 * hit.pIndex + 2] * size[2];
 
 					let position = new THREE.Vector3(x, y, z);
 					position.applyMatrix4(pc.matrixWorld);

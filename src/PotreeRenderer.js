@@ -668,7 +668,7 @@ export class Renderer {
 
 
 
-	renderNode(octree, node, transform, target, shader, params) {
+	renderNode(octree, node, transform, target, shader, params = {}) {
 		let gl = this.gl;
 
 		let material = params.material ? params.material : octree.material;
@@ -676,6 +676,7 @@ export class Renderer {
 		let worldView = new THREE.Matrix4();
 
 		let mat4holder = new Float32Array(16);
+		let PCIndex = 0;
 
 		/*let gpsMin = Infinity;
 		let gpsMax = -Infinity
@@ -702,12 +703,14 @@ export class Renderer {
 		var children = [null, null, null, null, null, null, null, null];
 		let level = node.getLevel();
 
-		for (var ii = 0; ii < 8; ii++){
-			if (node.children[ii] && node.children[ii].geometryNode){
-				let index = (ii & 2) | ((ii & 1) << 2) | ((ii & 4) >> 2);
+		if (!params.nodeList || (PCIndex = params.nodeList.indexOf(node)) >= 0){
+			for (var ii = 0; ii < 8; ii++){
+				if (node.children[ii] && node.children[ii].geometryNode){
+					let index = (ii & 2) | ((ii & 1) << 2) | ((ii & 4) >> 2);
 
-				childrenMasking |= 1 << index;
-				children[index] = node.children[ii];
+					childrenMasking |= 1 << index;
+					children[index] = node.children[ii];
+				}
 			}
 		}
 
@@ -723,7 +726,7 @@ export class Renderer {
 
 			shader.setUniform1f("uLevel", level);
 			shader.setUniform1f("setChildren", childrenMasking);
-			//shader.setUniform1f("uPCIndex", i);
+			shader.setUniform1f("uPCIndex", PCIndex);
 
 			let geometry = node.geometryNode.geometry;
 
@@ -737,6 +740,47 @@ export class Renderer {
 				shader.setUniform1f("uGPSOffset", gpsOffset);
 				shader.setUniform1f("uGPSRange", gpsRange);
 			}*/
+
+			{ // Clip Polygons
+				if(material.clipPolygons && material.clipPolygons.length > 0){
+
+					let clipPolygonVCount = [];
+					let worldViewProjMatrices = [];
+
+					for(let clipPolygon of material.clipPolygons){
+
+						let view = clipPolygon.viewMatrix;
+						let proj = clipPolygon.projMatrix;
+
+						let worldViewProj = proj.clone().multiply(view).multiply(world);
+
+						clipPolygonVCount.push(clipPolygon.markers.length);
+						worldViewProjMatrices.push(worldViewProj);
+					}
+
+					let flattenedMatrices = [].concat(...worldViewProjMatrices.map(m => m.elements));
+
+					let flattenedVertices = new Array(8 * 3 * material.clipPolygons.length);
+					for(let i = 0; i < material.clipPolygons.length; i++){
+						let clipPolygon = material.clipPolygons[i];
+						for(let j = 0; j < clipPolygon.markers.length; j++){
+							flattenedVertices[i * 24 + (j * 3 + 0)] = clipPolygon.markers[j].position.x;
+							flattenedVertices[i * 24 + (j * 3 + 1)] = clipPolygon.markers[j].position.y;
+							flattenedVertices[i * 24 + (j * 3 + 2)] = clipPolygon.markers[j].position.z;
+						}
+					}
+
+					const lClipPolygonVCount = shader.uniformLocations["uClipPolygonVCount[0]"];
+					gl.uniform1iv(lClipPolygonVCount, clipPolygonVCount);
+
+					const lClipPolygonVP = shader.uniformLocations["uClipPolygonWVP[0]"];
+					gl.uniformMatrix4fv(lClipPolygonVP, false, flattenedMatrices);
+
+					const lClipPolygons = shader.uniformLocations["uClipPolygonVertices[0]"];
+					gl.uniform3fv(lClipPolygons, flattenedVertices);
+
+				}
+			}
 
 			{
 				//let uFilterGPSTimeClipRange = material.uniforms.uFilterGPSTimeClipRange.value;
@@ -777,48 +821,6 @@ export class Renderer {
 				this.renderNode(octree, children[i], matrix, target, shader, params);
 			}
 		}
-
-
-			/*{ // Clip Polygons
-				if(material.clipPolygons && material.clipPolygons.length > 0){
-
-					let clipPolygonVCount = [];
-					let worldViewProjMatrices = [];
-
-					for(let clipPolygon of material.clipPolygons){
-
-						let view = clipPolygon.viewMatrix;
-						let proj = clipPolygon.projMatrix;
-
-						let worldViewProj = proj.clone().multiply(view).multiply(world);
-
-						clipPolygonVCount.push(clipPolygon.markers.length);
-						worldViewProjMatrices.push(worldViewProj);
-					}
-
-					let flattenedMatrices = [].concat(...worldViewProjMatrices.map(m => m.elements));
-
-					let flattenedVertices = new Array(8 * 3 * material.clipPolygons.length);
-					for(let i = 0; i < material.clipPolygons.length; i++){
-						let clipPolygon = material.clipPolygons[i];
-						for(let j = 0; j < clipPolygon.markers.length; j++){
-							flattenedVertices[i * 24 + (j * 3 + 0)] = clipPolygon.markers[j].position.x;
-							flattenedVertices[i * 24 + (j * 3 + 1)] = clipPolygon.markers[j].position.y;
-							flattenedVertices[i * 24 + (j * 3 + 2)] = clipPolygon.markers[j].position.z;
-						}
-					}
-
-					const lClipPolygonVCount = shader.uniformLocations["uClipPolygonVCount[0]"];
-					gl.uniform1iv(lClipPolygonVCount, clipPolygonVCount);
-
-					const lClipPolygonVP = shader.uniformLocations["uClipPolygonWVP[0]"];
-					gl.uniformMatrix4fv(lClipPolygonVP, false, flattenedMatrices);
-
-					const lClipPolygons = shader.uniformLocations["uClipPolygonVertices[0]"];
-					gl.uniform3fv(lClipPolygons, flattenedVertices);
-
-				}
-			}*/
 
 			// uBBSize
 
@@ -869,6 +871,7 @@ export class Renderer {
 		let view = camera.matrixWorldInverse;
 		let viewInv = camera.matrixWorld;
 		let proj = camera.projectionMatrix;
+		proj = new THREE.Matrix4().multiplyMatrices(proj, camera.matrixWorldInverse);
 		let projInv = new THREE.Matrix4().getInverse(proj);
 		let worldView = new THREE.Matrix4();
 
@@ -1048,7 +1051,7 @@ export class Renderer {
 			}
 
 			shader.setUniform1i("clipMethod", material.clipMethod);
-
+			
 			if (material.clipBoxes && material.clipBoxes.length > 0) {
 				//let flattenedMatrices = [].concat(...material.clipBoxes.map(c => c.inverse.elements));
 
@@ -1088,16 +1091,9 @@ export class Renderer {
 				//gl.uniformMatrix4fv(lClipSpheres, false, material.uniforms.clipSpheres.value);
 			}
 
-			{
-				let m = Math.min(screenWidth, screenHeight) / 500;
-
-				shader.setUniform1f("size", material.size * m);
-				shader.setUniform1f("maxSize", material.uniforms.maxSize.value * m);
-				shader.setUniform1f("minSize", material.uniforms.minSize.value * m);
-			}
-
-
-
+			shader.setUniform1f("size", material.size);
+			shader.setUniform1f("maxSize", material.uniforms.maxSize.value);
+			shader.setUniform1f("minSize", material.uniforms.minSize.value);
 
 			// uniform float uPCIndex
 			shader.setUniform1f("uOctreeSpacing", material.spacing);
@@ -1214,10 +1210,12 @@ export class Renderer {
 		}
 		
 		if (octree.root.sceneNode){
-			var matrix = new THREE.Matrix4();
-			matrix.multiplyMatrices(camera.matrixWorldInverse, octree.root.sceneNode.matrixWorld)
+			var matrix = octree.root.sceneNode.matrixWorld.clone()
 
-			matrix.scale(octree.root.pointcloud.boundingBox.max);
+			let min = octree.root.pointcloud.boundingBox.min;
+			let max = octree.root.pointcloud.boundingBox.max;
+
+			matrix.scale({x: max.x - min.x, y: max.y - min.y, z: max.z - min.z});
 
 			this.renderNode(octree, octree.root, matrix, target, shader, params);
 		}
@@ -1239,7 +1237,7 @@ export class Renderer {
 		camera.updateProjectionMatrix();
 
 		const traversalResult = this.traverse(scene);
-
+		
 		// RENDER
 		for (const octree of traversalResult.octrees) {
 			this.renderOctree(octree, camera, target, params);

@@ -1,3 +1,4 @@
+#extension GL_EXT_frag_depth : enable
 
 precision highp float;
 precision highp int;
@@ -18,6 +19,8 @@ uniform float near;
 uniform float far;
 uniform float uScreenWidth;
 uniform float uScreenHeight;
+
+varying vec2 logDepth;
 
 varying vec4	vColor;
 varying float	vLogDepth;
@@ -45,6 +48,8 @@ void main() {
 		gl_FragColor.a = weight;
 		gl_FragColor.xyz = gl_FragColor.xyz * weight;
 	#endif
+
+	gl_FragDepthEXT = log2(logDepth.x) * logDepth.y;
 }
 
 

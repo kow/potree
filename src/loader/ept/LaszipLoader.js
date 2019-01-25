@@ -112,6 +112,25 @@ export class EptLazBatcher {
 			let positions = new Float32Array(e.data.position);
 			let colors = new Uint8Array(e.data.color);
 
+			//normalize geometry to 0 - 1
+			{
+				let min = this.node.boundingBox.min;
+				let max = this.node.boundingBox.max;
+
+				let off = [0, 0, 0]
+				let size = [max.x - min.x, max.y - min.y, max.z - min.z];
+
+				for (let i = 0; i < positions.length; i += 3){
+					let x = positions[i + 0];
+					let y = positions[i + 1];
+					let z = positions[i + 2];
+
+					positions[i + 0] = (x - off[0]) / size[0];
+					positions[i + 1] = (y - off[1]) / size[1];
+					positions[i + 2] = (z - off[2]) / size[2];
+				}
+			}
+
 			let intensities = new Float32Array(e.data.intensity);
 			let classifications = new Uint8Array(e.data.classification);
 			let returnNumbers = new Uint8Array(e.data.returnNumber);
@@ -139,8 +158,8 @@ export class EptLazBatcher {
 			g.attributes.indices.normalized = true;
 
 			let tightBoundingBox = new THREE.Box3(
-				new THREE.Vector3().fromArray(e.data.tightBoundingBox.min),
-				new THREE.Vector3().fromArray(e.data.tightBoundingBox.max)
+				new THREE.Vector3(0, 0, 0),
+				new THREE.Vector3(1, 1, 1)
 			);
 
 			this.node.doneLoading(

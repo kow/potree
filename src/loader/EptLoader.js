@@ -4,7 +4,6 @@
 
 export class EptLoader {
 	static async load(file, callback) {
-
 		let response = await fetch(file);
 		let json = await response.json();
 

@@ -36,16 +36,11 @@ export class Viewer extends EventDispatcher{
 		this.guiLoadTasks = [];
 
 		this.messages = [];
-		this.elMessages = $(`
-		<div id="message_listing" 
-			style="position: absolute; z-index: 1000; left: 10px; bottom: 10px">
-		</div>`);
-		$(domElement).append(this.elMessages);
 		
 		try{
 
 		{ // generate missing dom hierarchy
-			if ($(domElement).find('#potree_map').length === 0) {
+			/*if ($(domElement).find('#potree_map').length === 0) {
 				let potreeMap = $(`
 					<div id="potree_map" class="mapBox" style="position: absolute; left: 50px; top: 50px; width: 400px; height: 400px; display: none">
 						<div id="potree_map_header" style="position: absolute; width: 100%; height: 25px; top: 0px; background-color: rgba(0,0,0,0.5); z-index: 1000; border-top-left-radius: 3px; border-top-right-radius: 3px;">
@@ -54,19 +49,7 @@ export class Viewer extends EventDispatcher{
 					</div>
 				`);
 				$(domElement).append(potreeMap);
-			}
-
-			if ($(domElement).find('#potree_description').length === 0) {
-				let potreeDescription = $(`<div id="potree_description" class="potree_info_text"></div>`);
-				$(domElement).append(potreeDescription);
-			}
-
-			if ($(domElement).find('#potree_annotations').length === 0) {
-				let potreeAnnotationContainer = $(`
-					<div id="potree_annotation_container" 
-						style="position: absolute; z-index: 100000; width: 100%; height: 100%; pointer-events: none;"></div>`);
-				$(domElement).append(potreeAnnotationContainer);
-			}
+			}*/
 		}
 
 		this.pointCloudLoadedCallback = args.onPointCloudLoaded || function () {};
@@ -314,7 +297,7 @@ export class Viewer extends EventDispatcher{
 			scene: scene
 		});
 
-		{ // Annotations
+		/*{ // Annotations
 			$('.annotation').detach();
 
 			// for(let annotation of this.scene.annotations){
@@ -331,7 +314,7 @@ export class Viewer extends EventDispatcher{
 
 					e.annotation.traverse(node => {
 
-						$("#potree_annotation_container").append(node.domElement);
+						//$("#potree_annotation_container").append(node.domElement);
 						//this.renderArea.appendChild(node.domElement[0]);
 						node.scene = this.scene;
 					});
@@ -342,7 +325,7 @@ export class Viewer extends EventDispatcher{
 				oldScene.annotations.removeEventListener('annotation_added', this.onAnnotationAdded);
 			}
 			this.scene.annotations.addEventListener('annotation_added', this.onAnnotationAdded);
-		}
+		}*/
 	};
 
 	getControls (navigationMode) {
@@ -388,7 +371,7 @@ export class Viewer extends EventDispatcher{
 	}
 
 	setDescription (value) {
-		$('#potree_description')[0].innerHTML = value;
+		//$('#potree_description')[0].innerHTML = value;
 	};
 
 	setNavigationMode (value) {
@@ -542,22 +525,6 @@ export class Viewer extends EventDispatcher{
 
 	getFOV () {
 		return this.fov;
-	};
-
-	disableAnnotations () {
-		this.scene.annotations.traverse(annotation => {
-			annotation.domElement.css('pointer-events', 'none');
-
-			// return annotation.visible;
-		});
-	};
-
-	enableAnnotations () {
-		this.scene.annotations.traverse(annotation => {
-			annotation.domElement.css('pointer-events', 'auto');
-
-			// return annotation.visible;
-		});
 	};
 
 	setClassificationVisibility (key, value) {
@@ -904,8 +871,8 @@ export class Viewer extends EventDispatcher{
 		{ // create FIRST PERSON CONTROLS
 			this.fpControls = new FirstPersonControls(this);
 			this.fpControls.enabled = false;
-			this.fpControls.addEventListener('start', this.disableAnnotations.bind(this));
-			this.fpControls.addEventListener('end', this.enableAnnotations.bind(this));
+			//this.fpControls.addEventListener('start', this.disableAnnotations.bind(this));
+			//this.fpControls.addEventListener('end', this.enableAnnotations.bind(this));
 			// this.fpControls.addEventListener("double_click_move", (event) => {
 			//	let distance = event.targetLocation.distanceTo(event.position);
 			//	this.setMoveSpeed(Math.pow(distance, 0.4));
@@ -928,22 +895,22 @@ export class Viewer extends EventDispatcher{
 		{ // create ORBIT CONTROLS
 			this.orbitControls = new OrbitControls(this);
 			this.orbitControls.enabled = false;
-			this.orbitControls.addEventListener('start', this.disableAnnotations.bind(this));
-			this.orbitControls.addEventListener('end', this.enableAnnotations.bind(this));
+			//this.orbitControls.addEventListener('start', this.disableAnnotations.bind(this));
+			//this.orbitControls.addEventListener('end', this.enableAnnotations.bind(this));
 		}
 
 		{ // create EARTH CONTROLS
 			this.earthControls = new EarthControls(this);
 			this.earthControls.enabled = false;
-			this.earthControls.addEventListener('start', this.disableAnnotations.bind(this));
-			this.earthControls.addEventListener('end', this.enableAnnotations.bind(this));
+			//this.earthControls.addEventListener('start', this.disableAnnotations.bind(this));
+			//this.earthControls.addEventListener('end', this.enableAnnotations.bind(this));
 		}
 
 		{ // create DEVICE ORIENTATION CONTROLS
 			this.deviceControls = new DeviceOrientationControls(this);
 			this.deviceControls.enabled = false;
-			this.deviceControls.addEventListener('start', this.disableAnnotations.bind(this));
-			this.deviceControls.addEventListener('end', this.enableAnnotations.bind(this));
+			//this.deviceControls.addEventListener('start', this.disableAnnotations.bind(this));
+			//this.deviceControls.addEventListener('end', this.enableAnnotations.bind(this));
 		}
 	};
 
@@ -1095,9 +1062,12 @@ export class Viewer extends EventDispatcher{
 		this.renderer.sortObjects = false;
 		this.renderer.setSize(width, height);
 		this.renderer.autoClear = false;
+
+		this.renderer.domElement.style.outline = "none";
+		this.renderer.domElement.style.width = "100%"
+		this.renderer.domElement.style.height = "100%"
 		this.renderArea.appendChild(this.renderer.domElement);
 		this.renderer.domElement.tabIndex = '2222';
-		this.renderer.domElement.style.position = 'absolute';
 		this.renderer.domElement.addEventListener('mousedown', () => {
 			this.renderer.domElement.focus();
 		});
@@ -1443,7 +1413,7 @@ export class Viewer extends EventDispatcher{
 			//}
 
 			camera.near = 0.1;
-			camera.far = 10000;
+			camera.far = 1000000;
 
 			if(this.scene.cameraMode == CameraMode.ORTHOGRAPHIC) {
 				camera.near = -camera.far;
@@ -1527,8 +1497,7 @@ export class Viewer extends EventDispatcher{
 			}
 			
 			let clipBoxes = boxes.map( box => {
-				box.updateMatrixWorld();
-				let boxInverse = new THREE.Matrix4().getInverse(box.matrixWorld);
+				let boxInverse = new THREE.Matrix4().getInverse(box.matrix);
 				let boxPosition = box.getWorldPosition(new THREE.Vector3());
 				return {box: box, inverse: boxInverse, position: boxPosition};
 			});
@@ -1575,6 +1544,7 @@ export class Viewer extends EventDispatcher{
 		if(Potree.measureTimings) performance.mark("render-start");
 
 		{ // resize
+			//console.log(this.renderArea)
 			let width = this.scaleFactor * this.renderArea.clientWidth;
 			let height = this.scaleFactor * this.renderArea.clientHeight;
 			let pixelRatio = this.renderer.getPixelRatio();
@@ -1806,7 +1776,7 @@ export class Viewer extends EventDispatcher{
 			}
 		});
 
-		this.elMessages.prepend(message.element);
+		//this.elMessages.prepend(message.element);
 
 		message.element.slideToggle(animationDuration);
 

@@ -77,6 +77,8 @@ uniform float uLevel;
 uniform vec3 uColor;
 uniform float uOpacity;
 
+varying vec2 logDepth;
+
 uniform vec2 elevationRange;
 uniform vec2 intensityRange;
 
@@ -382,7 +384,7 @@ float getPointSize(){
 	float r = uOctreeSpacing * 1.7;
 	vRadius = r;
 	#if defined fixed_point_size
-		pointSize = 0;
+		pointSize = size;
 	#elif defined attenuated_point_size
 		if(uUseOrthographicCamera){
 			pointSize = size;
@@ -483,12 +485,13 @@ void doClipping(){
 
 	#if defined(num_clipboxes) && num_clipboxes > 0
 		for(int i = 0; i < num_clipboxes; i++){
-			vec4 clipPosition = clipBoxes[i] * modelMatrix * vec4( position, 1.0 );
+			vec4 clipPosition = clipBoxes[i] * modelViewMatrix * vec4( position, 1.0 );
+			
 			bool inside = -0.5 <= clipPosition.x && clipPosition.x <= 0.5;
 			inside = inside && -0.5 <= clipPosition.y && clipPosition.y <= 0.5;
 			inside = inside && -0.5 <= clipPosition.z && clipPosition.z <= 0.5;
 
-			insideCount = insideCount + (inside ? 1 : 0);
+			insideCount += int(inside);
 			clipVolumesCount++;
 		}	
 	#endif
@@ -497,7 +500,7 @@ void doClipping(){
 		for(int i = 0; i < num_clippolygons; i++) {
 			bool inside = pointInClipPolygon(position, i);
 
-			insideCount = insideCount + (inside ? 1 : 0);
+			insideCount += int(inside);
 			clipVolumesCount++;
 		}
 	#endif
@@ -542,6 +545,7 @@ void main() {
 	gl_Position = projectionMatrix * mvPosition;
 	vLogDepth = log2(-mvPosition.z);
 
+	logDepth = vec2(gl_Position.w + 1., 1. / log2(far + 1.));
 
 	// POINT SIZE
 	float pointSize = getPointSize();
