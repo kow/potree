@@ -871,7 +871,6 @@ export class Renderer {
 		let view = camera.matrixWorldInverse;
 		let viewInv = camera.matrixWorld;
 		let proj = camera.projectionMatrix;
-		proj = new THREE.Matrix4().multiplyMatrices(proj, camera.matrixWorldInverse);
 		let projInv = new THREE.Matrix4().getInverse(proj);
 		let worldView = new THREE.Matrix4();
 
@@ -1053,13 +1052,33 @@ export class Renderer {
 			shader.setUniform1i("clipMethod", material.clipMethod);
 			
 			if (material.clipBoxes && material.clipBoxes.length > 0) {
-				//let flattenedMatrices = [].concat(...material.clipBoxes.map(c => c.inverse.elements));
+				let orig = material.uniforms.clipBoxes.value;
+				let uni = new Float32Array(orig.length);
+				let view = viewInv.elements;
 
-				//const lClipBoxes = shader.uniformLocations["clipBoxes[0]"];
-				//gl.uniformMatrix4fv(lClipBoxes, false, flattenedMatrices);
+				for (let i = 0; i < orig.length; i += 16){
+					uni[i +  0] = view[0] * orig[i + 0] + view[1] * orig[i + 4] + view[2] * orig[i + 8] + view[3] * orig[i + 12];
+			        uni[i +  1] = view[0] * orig[i + 1] + view[1] * orig[i + 5] + view[2] * orig[i + 9] + view[3] * orig[i + 13];
+			        uni[i +  2] = view[0] * orig[i + 2] + view[1] * orig[i + 6] + view[2] * orig[i + 10] + view[3] * orig[i + 14];
+			        uni[i +  3] = view[0] * orig[i + 3] + view[1] * orig[i + 7] + view[2] * orig[i + 11] + view[3] * orig[i + 15];
+			        
+			        uni[i +  4] = view[4] * orig[i + 0] + view[5] * orig[i + 4] + view[6] * orig[i + 8] + view[7] * orig[i + 12];
+			        uni[i +  5] = view[4] * orig[i + 1] + view[5] * orig[i + 5] + view[6] * orig[i + 9] + view[7] * orig[i + 13];
+			        uni[i +  6] = view[4] * orig[i + 2] + view[5] * orig[i + 6] + view[6] * orig[i + 10] + view[7] * orig[i + 14];
+			        uni[i +  7] = view[4] * orig[i + 3] + view[5] * orig[i + 7] + view[6] * orig[i + 11] + view[7] * orig[i + 15];
+			        
+			        uni[i +  8] = view[8] * orig[i + 0] + view[9] * orig[i + 4] + view[10] * orig[i + 8] + view[11] * orig[i + 12];
+			        uni[i +  9] = view[8] * orig[i + 1] + view[9] * orig[i + 5] + view[10] * orig[i + 9] + view[11] * orig[i + 13];
+			        uni[i + 10] = view[8] * orig[i + 2] + view[9] * orig[i + 6] + view[10] * orig[i + 10] + view[11] * orig[i + 14];
+			        uni[i + 11] = view[8] * orig[i + 3] + view[9] * orig[i + 7] + view[10] * orig[i + 11] + view[11] * orig[i + 15];
+			        
+			        uni[i + 12] = view[12] * orig[i + 0] + view[13] * orig[i + 4] + view[14] * orig[i + 8] + view[15] * orig[i + 12];
+			        uni[i + 13] = view[12] * orig[i + 1] + view[13] * orig[i + 5] + view[14] * orig[i + 9] + view[15] * orig[i + 13];
+			        uni[i + 14] = view[12] * orig[i + 2] + view[13] * orig[i + 6] + view[14] * orig[i + 10] + view[15] * orig[i + 14];
+			        uni[i + 15] = view[12] * orig[i + 3] + view[13] * orig[i + 7] + view[14] * orig[i + 11] + view[15] * orig[i + 15];
+				}
 
-				const lClipBoxes = shader.uniformLocations["clipBoxes[0]"];
-				gl.uniformMatrix4fv(lClipBoxes, false, material.uniforms.clipBoxes.value);
+				gl.uniformMatrix4fv(shader.uniformLocations["clipBoxes[0]"], false, uni);
 			}
 
 			// TODO CLIPSPHERES
@@ -1210,7 +1229,8 @@ export class Renderer {
 		}
 		
 		if (octree.root.sceneNode){
-			var matrix = octree.root.sceneNode.matrixWorld.clone()
+			var matrix = camera.matrixWorldInverse.clone();
+			matrix.multiply(octree.root.sceneNode.matrixWorld);
 
 			let min = octree.root.pointcloud.boundingBox.min;
 			let max = octree.root.pointcloud.boundingBox.max;
