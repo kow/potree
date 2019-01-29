@@ -328,20 +328,6 @@ export class Viewer extends EventDispatcher{
 		}*/
 	};
 
-	getControls (navigationMode) {
-		if (navigationMode === OrbitControls) {
-			return this.orbitControls;
-		} else if (navigationMode === FirstPersonControls) {
-			return this.fpControls;
-		} else if (navigationMode === EarthControls) {
-			return this.earthControls;
-		} else if (navigationMode === DeviceOrientationControls) {
-			return this.deviceControls;
-		} else {
-			return null;
-		}
-	}
-
 	getMinNodeSize () {
 		return this.minNodeSize;
 	};
@@ -891,27 +877,6 @@ export class Viewer extends EventDispatcher{
 		//		this.setMoveSpeed(this.geoControls.moveSpeed);
 		//	});
 		// }
-
-		{ // create ORBIT CONTROLS
-			this.orbitControls = new OrbitControls(this);
-			this.orbitControls.enabled = false;
-			//this.orbitControls.addEventListener('start', this.disableAnnotations.bind(this));
-			//this.orbitControls.addEventListener('end', this.enableAnnotations.bind(this));
-		}
-
-		{ // create EARTH CONTROLS
-			this.earthControls = new EarthControls(this);
-			this.earthControls.enabled = false;
-			//this.earthControls.addEventListener('start', this.disableAnnotations.bind(this));
-			//this.earthControls.addEventListener('end', this.enableAnnotations.bind(this));
-		}
-
-		{ // create DEVICE ORIENTATION CONTROLS
-			this.deviceControls = new DeviceOrientationControls(this);
-			this.deviceControls.enabled = false;
-			//this.deviceControls.addEventListener('start', this.disableAnnotations.bind(this));
-			//this.deviceControls.addEventListener('end', this.enableAnnotations.bind(this));
-		}
 	};
 
 	toggleSidebar () {
@@ -1423,18 +1388,18 @@ export class Viewer extends EventDispatcher{
 		this.scene.cameraP.fov = this.fov;
 		
 		// Navigation mode changed?
-		if (this.getControls(scene.view.navigationMode) !== this.controls) {
+		if (!this.controls || scene.view.navigationMode !== this.controls.constructor) {
 			if (this.controls) {
 				this.controls.enabled = false;
 				this.inputHandler.removeInputListener(this.controls);
 			}
 
-			this.controls = this.getControls(scene.view.navigationMode);
+			this.controls = new scene.view.navigationMode(this);
 			this.controls.enabled = true;
 			this.inputHandler.addInputListener(this.controls);
 		}
 		
-		if (this.getControls(scene.view.navigationMode) === this.deviceControls) {
+		if (scene.view.navigationMode === DeviceOrientationControls) {
 			this.controls.setScene(scene);
 			this.controls.update(delta);
 

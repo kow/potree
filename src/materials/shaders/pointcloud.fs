@@ -49,7 +49,7 @@ void main() {
 		gl_FragColor.xyz = gl_FragColor.xyz * weight;
 	#endif
 
-	gl_FragDepthEXT = log2(logDepth.x) * logDepth.y;
+	//gl_FragDepthEXT = log2(logDepth.x) * logDepth.y;
 }
 
 

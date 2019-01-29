@@ -100,6 +100,28 @@ export function updateVisibilityStructures(pointclouds, camera, renderer) {
 
 
 export function updateVisibility(pointclouds, camera, renderer){
+	/*let visibleNodes = [];
+	let points = 0;
+
+
+	for (let pointcloud of pointclouds){
+		pointcloud.visibleNodes = [];
+
+		if (!pointcloud.root.isLoaded()){
+			pointcloud.root.load()
+		}
+		
+		pointcloud.visibleNodes.push(pointcloud.root)
+
+		points += pointcloud.root.getNumPoints();
+		visibleNodes.push(pointcloud.root)
+	}
+
+	return {
+		visibleNodes: visibleNodes,
+		numVisiblePoints: points,
+		lowestSpacing: 10
+	};*/
 
 	let numVisibleNodes = 0;
 	let numVisiblePoints = 0;
