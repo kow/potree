@@ -4,6 +4,50 @@ import {PointAttributeNames} from "./PointAttributes.js";
 import {Version} from "../Version.js";
 import {XHRFactory} from "../XHRFactory.js";
 
+let names = {
+	[PointAttributeNames.POSITION_CARTESIAN]: 'position',
+	[PointAttributeNames.COLOR_PACKED]: 'color',
+	[PointAttributeNames.CLASSIFICATION]: 'classification',
+	[PointAttributeNames.RETURN_NUMBER]: 'returnNumber',
+	[PointAttributeNames.NUMBER_OF_RETURNS]: 'numberOfReturns',
+	[PointAttributeNames.SOURCE_ID]: 'pointSourceID',
+	[PointAttributeNames.NORMAL_SPHEREMAPPED]: 'normal',
+	[PointAttributeNames.NORMAL_OCT16]: 'normal',
+	[PointAttributeNames.NORMAL]: 'normal',
+	[PointAttributeNames.INDICES]: 'indices',
+	[PointAttributeNames.SPACING]: 'spacing',
+	[PointAttributeNames.GPS_TIME]: 'gpsTime'
+}
+
+let constructors = {
+	[PointAttributeNames.POSITION_CARTESIAN]: Float32Array,
+	[PointAttributeNames.COLOR_PACKED]: Uint8Array,
+	[PointAttributeNames.CLASSIFICATION]: Float32Array,
+	[PointAttributeNames.RETURN_NUMBER]: Uint8Array,
+	[PointAttributeNames.NUMBER_OF_RETURNS]: Uint8Array,
+	[PointAttributeNames.SOURCE_ID]: Uint16Array,
+	[PointAttributeNames.NORMAL_SPHEREMAPPED]: Float32Array,
+	[PointAttributeNames.NORMAL_OCT16]: Float32Array,
+	[PointAttributeNames.NORMAL]: Float32Array,
+	[PointAttributeNames.INDICES]: Uint8Array,
+	[PointAttributeNames.SPACING]: Float32Array,
+	[PointAttributeNames.GPS_TIME]: Float32Array
+}
+
+let strides = {
+	[PointAttributeNames.POSITION_CARTESIAN]: 3,
+	[PointAttributeNames.COLOR_PACKED]: 4,
+	[PointAttributeNames.CLASSIFICATION]: 1,
+	[PointAttributeNames.RETURN_NUMBER]: 1,
+	[PointAttributeNames.NUMBER_OF_RETURNS]: 1,
+	[PointAttributeNames.SOURCE_ID]: 1,
+	[PointAttributeNames.NORMAL_SPHEREMAPPED]: 3,
+	[PointAttributeNames.NORMAL_OCT16]: 3,
+	[PointAttributeNames.NORMAL]: 3,
+	[PointAttributeNames.INDICES]: 4,
+	[PointAttributeNames.SPACING]: 1,
+	[PointAttributeNames.GPS_TIME]: 1
+}
 
 export class BinaryLoader{
 
@@ -63,9 +107,77 @@ export class BinaryLoader{
 		let worker = Potree.workerPool.getWorker(workerPath);
 
 		worker.onmessage = function (e) {
-
 			let data = e.data;
-			let buffers = data.attributeBuffers;
+			let buffers = Object.create(data.attributeBuffers);
+			let parent = node.parent;
+			if (node.level >= 3) return;
+			if (parent){
+				let min = parent.boundingBox.min;
+				let max = parent.boundingBox.max;
+				let size = [max.x - min.x, max.y - min.y, max.z - min.z];
+
+				let pos = parent.geometry.attributes.position.array;
+				let i;
+				for (i = 0; i < 8; i++) if (parent.children[i] == node) break;
+
+				if (i < 8){
+					let count = 0;
+
+					let index = (i & 2) | ((i & 2) << 2) | ((i & 4) >> 2);
+					let arrays = [];
+
+					for (let ii = 0; ii < pos.length; ii += 3){
+						if (index == ((pos[ii] >= 0.5 ? 1 : 0) | (pos[ii + 1] >= 0.5 ? 2 : 0) | (pos[ii + 2] >= 0.5 ? 4 : 0))){
+							count++;
+						}
+					}
+
+					for (let o in buffers){
+						let pnode = parent.geometry.attributes[names[o]].array;
+						let oarray = new constructors[o](buffers[o].buffer);
+						let narray = new constructors[o](oarray.length + count * strides[o])
+						narray.set(oarray);
+
+						buffers[o] = narray;
+
+						let obj = {
+							parray: pnode,
+							array: narray,
+							index: oarray.length,
+							stride: strides[o],
+							pos: o == PointAttributeNames.POSITION_CARTESIAN
+						};
+
+						if (obj.pos){
+							arrays.splice(0, 0, obj);
+						}else{
+							arrays.push(obj);
+						}
+					}
+
+					let xoff = (index & 1) ? -.5 : 0;
+					let yoff = (index & 2) ? -.5 : 0;
+					let zoff = (index & 4) ? -.5 : 0;
+
+					for (let ii = 0; ii < pos.length / 3; ii++){
+						if (index == ((pos[ii * 3] >= 0.5 ? 1 : 0) | (pos[ii * 3 + 1] >= 0.5 ? 2 : 0) | (pos[ii * 3 + 2] >= 0.5 ? 4 : 0))){
+							for (let p of arrays){
+								let off = ii * p.stride;
+
+								if (p.pos){
+									p.array[p.index++] = (p.parray[off + 0] + xoff) * size[0]
+									p.array[p.index++] = (p.parray[off + 1] + yoff) * size[1]
+									p.array[p.index++] = (p.parray[off + 2] + zoff) * size[2]
+								}else{
+									for (let iv = 0; iv < p.stride; iv++){
+										p.array[p.index++] = p.parray[off + iv]
+									}
+								}
+							}
+						}
+					}
+				}
+			}
 
 			Potree.workerPool.returnWorker(workerPath, worker);
 			let geometry = new THREE.BufferGeometry();
@@ -81,7 +193,7 @@ export class BinaryLoader{
 					{
 						let min = node.boundingBox.min;
 						let max = node.boundingBox.max;
-
+						
 						let off = [0, 0, 0]
 						let size = [max.x - min.x, max.y - min.y, max.z - min.z];
 						
@@ -92,42 +204,43 @@ export class BinaryLoader{
 						}
 					}
 
-
-					geometry.addAttribute('position', new THREE.BufferAttribute(buffer, 3));
+					buffer = new THREE.BufferAttribute(buffer, 3);
 				} else if (property === PointAttributeNames.COLOR_PACKED) {
-					geometry.addAttribute('color', new THREE.BufferAttribute(new Uint8Array(buffer), 4, true));
+					buffer = new THREE.BufferAttribute(new Uint8Array(buffer), 4, true);
 				} else if (property === PointAttributeNames.INTENSITY) {
-					geometry.addAttribute('intensity', new THREE.BufferAttribute(new Float32Array(buffer), 1));
+					buffer = new THREE.BufferAttribute(new Float32Array(buffer), 1);
 				} else if (property === PointAttributeNames.CLASSIFICATION) {
-					geometry.addAttribute('classification', new THREE.BufferAttribute(new Uint8Array(buffer), 1));
+					buffer = new THREE.BufferAttribute(new Uint8Array(buffer), 1);
 				} else if (property === PointAttributeNames.RETURN_NUMBER) {
-					geometry.addAttribute('returnNumber', new THREE.BufferAttribute(new Uint8Array(buffer), 1));
+					buffer = new THREE.BufferAttribute(new Uint8Array(buffer), 1);
 				} else if (property === PointAttributeNames.NUMBER_OF_RETURNS) {
-					geometry.addAttribute('numberOfReturns', new THREE.BufferAttribute(new Uint8Array(buffer), 1));
+					buffer = new THREE.BufferAttribute(new Uint8Array(buffer), 1);
 				} else if (property === PointAttributeNames.SOURCE_ID) {
-					geometry.addAttribute('pointSourceID', new THREE.BufferAttribute(new Uint16Array(buffer), 1));
+					buffer = new THREE.BufferAttribute(new Uint16Array(buffer), 1);
 				} else if (property === PointAttributeNames.NORMAL_SPHEREMAPPED) {
-					geometry.addAttribute('normal', new THREE.BufferAttribute(new Float32Array(buffer), 3));
+					buffer = new THREE.BufferAttribute(new Float32Array(buffer), 3);
 				} else if (property === PointAttributeNames.NORMAL_OCT16) {
-					geometry.addAttribute('normal', new THREE.BufferAttribute(new Float32Array(buffer), 3));
+					buffer = new THREE.BufferAttribute(new Float32Array(buffer), 3);
 				} else if (property === PointAttributeNames.NORMAL) {
-					geometry.addAttribute('normal', new THREE.BufferAttribute(new Float32Array(buffer), 3));
+					buffer = new THREE.BufferAttribute(new Float32Array(buffer), 3);
 				} else if (property === PointAttributeNames.INDICES) {
 					let bufferAttribute = new THREE.BufferAttribute(new Uint8Array(buffer), 4);
 					bufferAttribute.normalized = true;
-					geometry.addAttribute('indices', bufferAttribute);
+					buffer = bufferAttribute;
 				} else if (property === PointAttributeNames.SPACING) {
 					let bufferAttribute = new THREE.BufferAttribute(new Float32Array(buffer), 1);
-					geometry.addAttribute('spacing', bufferAttribute);
+					buffer = bufferAttribute;
 				} else if (property === PointAttributeNames.GPS_TIME) {
 					let bufferAttribute = new THREE.BufferAttribute(new Float32Array(buffer), 1);
-					geometry.addAttribute('gpsTime', bufferAttribute);
+					buffer = bufferAttribute;
 
 					node.gpsTime = {
 						offset: buffers[property].offset,
 						range: buffers[property].range,
 					};
 				}
+
+				geometry.addAttribute(names[property], buffer)
 			}
 
 			let numPoints = e.data.buffer.byteLength / pointAttributes.byteSize;

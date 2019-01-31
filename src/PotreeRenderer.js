@@ -705,7 +705,9 @@ export class Renderer {
 
 		if (!params.nodeList || (PCIndex = params.nodeList.indexOf(node)) >= 0){
 			for (var ii = 0; ii < 8; ii++){
-				if (node.children[ii] && node.children[ii].sceneNode && node.children[ii].sceneNode.visible && node.children[ii].geometryNode){
+				let child = node.children[ii];
+
+				if (child && child.sceneNode && child.sceneNode.visible){
 					let index = (ii & 2) | ((ii & 1) << 2) | ((ii & 4) >> 2);
 
 					childrenMasking |= 1 << index;

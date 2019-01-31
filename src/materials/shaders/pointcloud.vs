@@ -555,15 +555,6 @@ void main() {
 	// COLOR
 	vColor = getColor();
 
-	//LOD CLIPPING clip lowel detail points if higher detail ponts are going to render there
-	{
-		//vColor = vec4(position, 1);
-		int bit = int(position.x >= .5) + int(position.y >= .5) * 2 + int(position.z >= .5) * 4;
-
-		if (mod(setChildren / pow(2., float(bit)), 2.) >= 1.) gl_Position = vec4(100.0, 100.0, 100.0, 0.0);
-	}
-
-
 	#if defined hq_depth_pass
 		float originalDepth = gl_Position.w;
 		float adjustedDepth = originalDepth + 2.0 * vRadius;
@@ -573,6 +564,13 @@ void main() {
 		gl_Position = projectionMatrix * mvPosition;
 	#endif
 
+	//LOD CLIPPING clip lowel detail points if higher detail ponts are available
+	{
+		//vColor = vec4(position, 1);
+		int bit = int(position.x >= .5) + int(position.y >= .5) * 2 + int(position.z >= .5) * 4;
+
+		if (mod(setChildren / pow(2., float(bit)), 2.) >= 1.) gl_Position = vec4(0);
+	}
 
 	// CLIPPING
 	doClipping();
