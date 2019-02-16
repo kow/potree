@@ -36,7 +36,6 @@ export class EptLaszipLoader {
 	parse(node, buffer){
 		let lf = new LASFile(buffer);
 		let handler = new EptLazBatcher(node);
-
 		lf.open()
 		.then(() => {
 			lf.isOpen = true;
@@ -157,7 +156,7 @@ export class EptLazBatcher {
 				let max = parent.boundingBox.max;
 				let size = [max.x - min.x, max.y - min.y, max.z - min.z];
 
-				let pos = new Float32Array(e.data.position);
+				let pos = parent.geometry.attributes.position.array;
 				let i;
 				for (i = 0; i < 8; i++) if (parent.children[i] == node) break;
 
@@ -172,8 +171,6 @@ export class EptLazBatcher {
 							count++;
 						}
 					}
-
-					count = 0;
 
 					for (let o in e.data){
 						if (!constructors[o]) continue;
