@@ -41,7 +41,7 @@ export function updateVisibilityStructures(pointclouds, camera, renderer) {
 	for (let i = 0; i < pointclouds.length; i++) {
 		let pointcloud = pointclouds[i];
 
-		if (!pointcloud.initialized()) {
+		if (!pointcloud.initialized() || !pointcloud.viewMatrixWorld) {
 			continue;
 		}
 
@@ -52,9 +52,9 @@ export function updateVisibilityStructures(pointclouds, camera, renderer) {
 		pointcloud.visibleGeometry = [];
 
 		// frustum in object space
-		camera.updateMatrixWorld();
+		//camera.updateMatrixWorld();
 		let frustum = new THREE.Frustum();
-		let viewI = camera.matrixWorldInverse;
+		let viewI = pointcloud.viewMatrixWorldInv;
 		let world = pointcloud.matrixWorld;
 		
 		// use close near plane for frustum intersection
@@ -62,13 +62,13 @@ export function updateVisibilityStructures(pointclouds, camera, renderer) {
 		frustumCam.near = Math.min(camera.near, 0.1);
 		frustumCam.updateProjectionMatrix();
 		let proj = camera.projectionMatrix;
-
+		
 		let fm = new THREE.Matrix4().multiply(proj).multiply(viewI).multiply(world);
 		frustum.setFromMatrix(fm);
 		frustums.push(frustum);
 
 		// camera position in object space
-		let view = camera.matrixWorld;
+		let view = pointcloud.viewMatrixWorld;
 		let worldI = new THREE.Matrix4().getInverse(world);
 		let camMatrixObject = new THREE.Matrix4().multiply(worldI).multiply(view);
 		let camObjPos = new THREE.Vector3().setFromMatrixPosition(camMatrixObject);

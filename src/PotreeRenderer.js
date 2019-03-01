@@ -728,7 +728,6 @@ export class Renderer {
 
 			shader.setUniform1f("uLevel", level);
 			shader.setUniform1f("setChildren", childrenMasking);
-			shader.setUniform1f("uPCIndex", PCIndex);
 
 			let geometry = node.geometryNode.geometry;
 
@@ -794,6 +793,8 @@ export class Renderer {
 				shader.setUniform2f("uFilterNumberOfReturnsRange", material.uniforms.uFilterNumberOfReturnsRange.value);
 				//shader.setUniform2f("uFilterGPSTimeClipRange", [gpsCliPRangeMin, gpsCliPRangeMax]);
 			}
+
+			shader.setUniform1f("uPCIndex", PCIndex);
 
 			let webglBuffer = null;
 			if(!this.buffers.has(geometry)){
@@ -865,6 +866,18 @@ export class Renderer {
 	}
 
 	renderOctree(octree, camera, target, params = {}){
+		//update view matrix to match octree projection
+		if (camera.controls){
+			let matrix = camera.controls.update(0, octree.projection);
+			camera.position.copy(camera.controls.position);			
+			camera.matrix.copy({elements: matrix});
+
+			camera.matrixAutoUpdate = false;
+			camera.updateMatrixWorld(true);
+		}
+
+		octree.viewMatrixWorld = camera.matrixWorld.clone();
+		octree.viewMatrixWorldInv = camera.matrixWorldInverse.clone();
 
 		let gl = this.gl;
 
@@ -1248,7 +1261,6 @@ export class Renderer {
 	}
 
 	render(scene, camera, target = null, params = {}) {
-
 		const gl = this.gl;
 
 		// PREPARE 
@@ -1272,6 +1284,15 @@ export class Renderer {
 		gl.bindTexture(gl.TEXTURE_2D, null)
 
 		this.threeRenderer.state.reset();
+
+		if (camera.controls){
+			let matrix = camera.controls.update(0);
+			camera.position.copy(camera.controls.position);			
+			camera.matrix.copy({elements: matrix});
+
+			camera.matrixAutoUpdate = false;
+			camera.updateMatrixWorld(true);
+		}
 	}
 };
 

@@ -264,7 +264,7 @@ export class EptLazBatcher {
 					new THREE.Vector3(...e.data.mean));
 
 			if (node.listeners){
-				for (o of node.listeners) o();
+				for (let o of node.listeners) o();
 			}
 
 			Potree.workerPool.returnWorker(workerPath, worker);

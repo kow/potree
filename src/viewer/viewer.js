@@ -1378,7 +1378,7 @@ export class Viewer extends EventDispatcher{
 			//}
 
 			camera.near = 0.1;
-			camera.far = 1000000;
+			camera.far = 100000000;
 
 			if(this.scene.cameraMode == CameraMode.ORTHOGRAPHIC) {
 				camera.near = -camera.far;
@@ -1405,6 +1405,19 @@ export class Viewer extends EventDispatcher{
 
 			this.scene.cameraP.position.copy(scene.view.position);
 			this.scene.cameraO.position.copy(scene.view.position);
+
+			camera.updateMatrix();
+			camera.updateMatrixWorld();
+		} else if (this.controls && scene.view.matrix){
+			this.controls.setScene(scene);
+			this.controls.update(delta);
+			this.scene.cameraP.controls = this.controls;
+			
+			this.scene.cameraP.position.copy(scene.view.position);			
+			camera.matrix.copy({elements: scene.view.matrix});
+
+			camera.matrixAutoUpdate = false;
+			camera.updateMatrixWorld(true);
 		} else if (this.controls !== null) {
 			this.controls.setScene(scene);
 			this.controls.update(delta);
@@ -1418,10 +1431,11 @@ export class Viewer extends EventDispatcher{
 			this.scene.cameraO.rotation.order = "ZXY";
 			this.scene.cameraO.rotation.x = Math.PI / 2 + this.scene.view.pitch;
 			this.scene.cameraO.rotation.z = this.scene.view.yaw;
+
+			camera.updateMatrix();
+			camera.updateMatrixWorld();
 		}
 		
-		camera.updateMatrix();
-		camera.updateMatrixWorld();
 		camera.matrixWorldInverse.getInverse(camera.matrixWorld);
 
 		{

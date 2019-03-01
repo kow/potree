@@ -2,6 +2,7 @@ function readUsingDataView(event) {
 	performance.mark("laslaz-start");
 
 	let buffer = event.data.buffer;
+
 	let numPoints = event.data.numPoints;
 	let pointSize = event.data.pointSize;
 	let pointFormat = event.data.pointFormatID;
