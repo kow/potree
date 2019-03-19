@@ -29,7 +29,7 @@ let constructors = {
 	[PointAttributeNames.NORMAL_SPHEREMAPPED]: Float32Array,
 	[PointAttributeNames.NORMAL_OCT16]: Float32Array,
 	[PointAttributeNames.NORMAL]: Float32Array,
-	[PointAttributeNames.INDICES]: Uint8Array,
+	[PointAttributeNames.INDICES]: Uint32Array,
 	[PointAttributeNames.SPACING]: Float32Array,
 	[PointAttributeNames.GPS_TIME]: Float32Array
 }
@@ -44,7 +44,7 @@ let strides = {
 	[PointAttributeNames.NORMAL_SPHEREMAPPED]: 3,
 	[PointAttributeNames.NORMAL_OCT16]: 3,
 	[PointAttributeNames.NORMAL]: 3,
-	[PointAttributeNames.INDICES]: 4,
+	[PointAttributeNames.INDICES]: 1,
 	[PointAttributeNames.SPACING]: 1,
 	[PointAttributeNames.GPS_TIME]: 1
 }
@@ -145,7 +145,8 @@ export class BinaryLoader{
 							array: narray,
 							index: oarray.length,
 							stride: strides[o],
-							pos: o == PointAttributeNames.POSITION_CARTESIAN
+							pos: o == PointAttributeNames.POSITION_CARTESIAN,
+							indices: o == PointAttributeNames.INDICES
 						};
 
 						if (obj.pos){
@@ -164,7 +165,9 @@ export class BinaryLoader{
 							for (let p of arrays){
 								let off = ii * p.stride;
 
-								if (p.pos){
+								if (p.indices){
+									p.array[p.index] = p.index++;
+								}else if (p.pos){
 									p.array[p.index++] = (p.parray[off + 0] + xoff) * size[0]
 									p.array[p.index++] = (p.parray[off + 1] + yoff) * size[1]
 									p.array[p.index++] = (p.parray[off + 2] + zoff) * size[2]

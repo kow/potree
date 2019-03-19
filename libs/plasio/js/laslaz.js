@@ -242,7 +242,7 @@
 
 	LAZLoader.prototype.getHeader = function() {
 		var o = this;
-
+		
 		return new Promise(function(res, rej) {
 			o.dorr({type:'header'}, function(r) {
 				if (r.status !== 1)
@@ -290,6 +290,7 @@
 		this.arraybuffer = arraybuffer;
 
 		this.determineVersion();
+
 		if (this.version > 12)
 			throw new Error("Only file versions <= 1.2 are supported at this time");
 

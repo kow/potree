@@ -296,36 +296,6 @@ export class Viewer extends EventDispatcher{
 			oldScene: oldScene,
 			scene: scene
 		});
-
-		/*{ // Annotations
-			$('.annotation').detach();
-
-			// for(let annotation of this.scene.annotations){
-			//	this.renderArea.appendChild(annotation.domElement[0]);
-			// }
-
-			this.scene.annotations.traverse(annotation => {
-				this.renderArea.appendChild(annotation.domElement[0]);
-			});
-
-			if (!this.onAnnotationAdded) {
-				this.onAnnotationAdded = e => {
-				// console.log("annotation added: " + e.annotation.title);
-
-					e.annotation.traverse(node => {
-
-						//$("#potree_annotation_container").append(node.domElement);
-						//this.renderArea.appendChild(node.domElement[0]);
-						node.scene = this.scene;
-					});
-				};
-			}
-
-			if (oldScene) {
-				oldScene.annotations.removeEventListener('annotation_added', this.onAnnotationAdded);
-			}
-			this.scene.annotations.addEventListener('annotation_added', this.onAnnotationAdded);
-		}*/
 	};
 
 	getMinNodeSize () {
@@ -1064,6 +1034,39 @@ export class Viewer extends EventDispatcher{
 			this.visibleAnnotations = new Set();
 		}
 
+		{
+			//$('.annotation').detach();
+
+			// for(let annotation of this.scene.annotations){
+			//	this.renderArea.appendChild(annotation.domElement[0]);
+			// }
+
+			/*scene.annotations.traverse(annotation => {
+				if (!annotation.added){
+					annotation.added = true;
+					this.renderArea.appendChild(annotation.domElement[0]);
+				}
+			});*/
+
+			/*if (!this.onAnnotationAdded) {
+				this.onAnnotationAdded = e => {
+				// console.log("annotation added: " + e.annotation.title);
+
+					e.annotation.traverse(node => {
+
+						//$("#potree_annotation_container").append(node.domElement);
+						//this.renderArea.appendChild(node.domElement[0]);
+						node.scene = scene;
+					});
+				};
+			}
+
+			if (oldScene) {
+				oldScene.annotations.removeEventListener('annotation_added', this.onAnnotationAdded);
+			}
+			scene.annotations.addEventListener('annotation_added', this.onAnnotationAdded);*/
+		}
+
 		this.scene.annotations.updateBounds();
 		this.scene.cameraP.updateMatrixWorld();
 		this.scene.cameraO.updateMatrixWorld();
@@ -1378,7 +1381,7 @@ export class Viewer extends EventDispatcher{
 			//}
 
 			camera.near = 0.1;
-			camera.far = 100000000;
+			camera.far = 1000000;
 
 			if(this.scene.cameraMode == CameraMode.ORTHOGRAPHIC) {
 				camera.near = -camera.far;
@@ -1474,18 +1477,12 @@ export class Viewer extends EventDispatcher{
 			for(let profile of this.scene.profiles){
 				boxes.push(...profile.boxes);
 			}
-			
-			let clipBoxes = boxes.map( box => {
-				let boxInverse = new THREE.Matrix4().getInverse(box.matrix);
-				let boxPosition = box.getWorldPosition(new THREE.Vector3());
-				return {box: box, inverse: boxInverse, position: boxPosition};
-			});
 
 			let clipPolygons = this.scene.polygonClipVolumes.filter(vol => vol.initialized);
 			
 			// set clip volumes in material
 			for(let pointcloud of this.scene.pointclouds.filter(pc => pc.visible)){
-				pointcloud.material.setClipBoxes(clipBoxes);
+				pointcloud.material.setClipBoxes(boxes);
 				pointcloud.material.setClipPolygons(clipPolygons, this.clippingTool.maxPolygonVertices);
 				pointcloud.material.clipTask = this.clipTask;
 				pointcloud.material.clipMethod = this.clipMethod;

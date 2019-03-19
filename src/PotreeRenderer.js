@@ -1066,31 +1066,30 @@ export class Renderer {
 
 			shader.setUniform1i("clipMethod", material.clipMethod);
 			
-			if (material.clipBoxes && material.clipBoxes.length > 0) {
+			//being lazy here using a different math library than three
+			if (Math.Vector && material.clipBoxes && material.clipBoxes.length > 0) {
 				let orig = material.uniforms.clipBoxes.value;
 				let uni = new Float32Array(orig.length);
-				let view = viewInv.elements;
+				let view = Math.mat4(viewInv.elements);
 
 				for (let i = 0; i < orig.length; i += 16){
-					uni[i +  0] = view[0] * orig[i + 0] + view[1] * orig[i + 4] + view[2] * orig[i + 8] + view[3] * orig[i + 12];
-			        uni[i +  1] = view[0] * orig[i + 1] + view[1] * orig[i + 5] + view[2] * orig[i + 9] + view[3] * orig[i + 13];
-			        uni[i +  2] = view[0] * orig[i + 2] + view[1] * orig[i + 6] + view[2] * orig[i + 10] + view[3] * orig[i + 14];
-			        uni[i +  3] = view[0] * orig[i + 3] + view[1] * orig[i + 7] + view[2] * orig[i + 11] + view[3] * orig[i + 15];
-			        
-			        uni[i +  4] = view[4] * orig[i + 0] + view[5] * orig[i + 4] + view[6] * orig[i + 8] + view[7] * orig[i + 12];
-			        uni[i +  5] = view[4] * orig[i + 1] + view[5] * orig[i + 5] + view[6] * orig[i + 9] + view[7] * orig[i + 13];
-			        uni[i +  6] = view[4] * orig[i + 2] + view[5] * orig[i + 6] + view[6] * orig[i + 10] + view[7] * orig[i + 14];
-			        uni[i +  7] = view[4] * orig[i + 3] + view[5] * orig[i + 7] + view[6] * orig[i + 11] + view[7] * orig[i + 15];
-			        
-			        uni[i +  8] = view[8] * orig[i + 0] + view[9] * orig[i + 4] + view[10] * orig[i + 8] + view[11] * orig[i + 12];
-			        uni[i +  9] = view[8] * orig[i + 1] + view[9] * orig[i + 5] + view[10] * orig[i + 9] + view[11] * orig[i + 13];
-			        uni[i + 10] = view[8] * orig[i + 2] + view[9] * orig[i + 6] + view[10] * orig[i + 10] + view[11] * orig[i + 14];
-			        uni[i + 11] = view[8] * orig[i + 3] + view[9] * orig[i + 7] + view[10] * orig[i + 11] + view[11] * orig[i + 15];
-			        
-			        uni[i + 12] = view[12] * orig[i + 0] + view[13] * orig[i + 4] + view[14] * orig[i + 8] + view[15] * orig[i + 12];
-			        uni[i + 13] = view[12] * orig[i + 1] + view[13] * orig[i + 5] + view[14] * orig[i + 9] + view[15] * orig[i + 13];
-			        uni[i + 14] = view[12] * orig[i + 2] + view[13] * orig[i + 6] + view[14] * orig[i + 10] + view[15] * orig[i + 14];
-			        uni[i + 15] = view[12] * orig[i + 3] + view[13] * orig[i + 7] + view[14] * orig[i + 11] + view[15] * orig[i + 15];
+					//project
+					let mat = Math.mat4(orig.slice(i, 16));
+
+					if (camera.controls && camera.controls.project){
+						let p = camera.controls.project(octree.projection);
+
+						try {
+							let origin = p(Math.vec3(0).multiply(mat));
+							let x = p(Math.vec3(1, 0, 0).multiply(mat)).subtract(origin);
+							let y = p(Math.vec3(0, 1, 0).multiply(mat)).subtract(origin);
+							let z = p(Math.vec3(0, 0, 1).multiply(mat)).subtract(origin);
+
+							mat = Math.mat4(x, 0, y, 0, z, 0, origin, 1);
+						}catch (e){}
+					}
+
+					uni.set(mat.invert().multiply(view), i);
 				}
 
 				gl.uniformMatrix4fv(shader.uniformLocations["clipBoxes[0]"], false, uni);
@@ -1258,6 +1257,15 @@ export class Renderer {
 		gl.activeTexture(gl.TEXTURE2);
 		gl.bindTexture(gl.TEXTURE_2D, null);
 		gl.activeTexture(gl.TEXTURE0);
+
+		if (camera.controls){
+			let matrix = camera.controls.update(0);
+			camera.position.copy(camera.controls.position);			
+			camera.matrix.copy({elements: matrix});
+
+			camera.matrixAutoUpdate = false;
+			camera.updateMatrixWorld(true);
+		}
 	}
 
 	render(scene, camera, target = null, params = {}) {
@@ -1284,15 +1292,6 @@ export class Renderer {
 		gl.bindTexture(gl.TEXTURE_2D, null)
 
 		this.threeRenderer.state.reset();
-
-		if (camera.controls){
-			let matrix = camera.controls.update(0);
-			camera.position.copy(camera.controls.position);			
-			camera.matrix.copy({elements: matrix});
-
-			camera.matrixAutoUpdate = false;
-			camera.updateMatrixWorld(true);
-		}
 	}
 };
 

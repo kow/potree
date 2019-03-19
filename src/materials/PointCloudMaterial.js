@@ -297,8 +297,8 @@ export class PointCloudMaterial extends THREE.RawShaderMaterial {
 
 		for (let i = 0; i < this.clipBoxes.length; i++) {
 			let box = clipBoxes[i];
-
-			this.uniforms.clipBoxes.value.set(box.inverse.elements, 16 * i);
+			
+			this.uniforms.clipBoxes.value.set(box.matrix.elements, 16 * i);
 		}
 
 		for (let i = 0; i < this.uniforms.clipBoxes.value.length; i++) {

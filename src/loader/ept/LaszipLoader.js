@@ -187,7 +187,8 @@ export class EptLazBatcher {
 							array: narray,
 							index: oarray.length,
 							stride: strides[o],
-							pos: o == 'position'
+							pos: o == 'position',
+							indices: o == 'indices' && new Uint32Array(narray.buffer)
 						};
 
 						if (obj.pos){
@@ -206,7 +207,10 @@ export class EptLazBatcher {
 							for (let p of arrays){
 								let off = ii * p.stride;
 
-								if (p.pos){
+								if (p.indices){
+									p.indices[p.index >> 2] = p.index >> 2;
+									p.index += 4;
+								}else if (p.pos){
 									p.array[p.index++] = (p.parray[off + 0] + xoff) * size[0]
 									p.array[p.index++] = (p.parray[off + 1] + yoff) * size[1]
 									p.array[p.index++] = (p.parray[off + 2] + zoff) * size[2]

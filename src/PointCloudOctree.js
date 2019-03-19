@@ -387,11 +387,22 @@ export class PointCloudOctree extends PointCloudTree {
 		return intersects;
 	}
 
-	nodesOnRay (nodes, ray) {
+	nodesOnRay (nodes, ray, camera) {
 		let nodesOnRay = [];
 
-		let _ray = ray.clone();
 		for (let i = 0; i < nodes.length; i++) {
+			let pointcloud = nodes[i].pointcloud;
+			let _ray = ray.clone();
+			//reproject ray to local projection system
+			if (camera && camera.controls){
+				let pointTo = camera.controls.project(pointcloud.projection, _ray.direction.multiplyScalar(100).add(_ray.origin));
+				let origin = camera.controls.project(pointcloud.projection, _ray.origin);
+				pointTo.subtract(origin).normalize();
+
+				_ray.origin = new THREE.Vector3(origin.x, origin.y, origin.z);
+				_ray.direction = new THREE.Vector3(pointTo.x, pointTo.y, pointTo.z);
+			}
+
 			let node = nodes[i];
 			// let inverseWorld = new THREE.Matrix4().getInverse(node.matrixWorld);
 			// let sphere = node.getBoundingSphere().clone().applyMatrix4(node.sceneNode.matrixWorld);
@@ -401,7 +412,7 @@ export class PointCloudOctree extends PointCloudTree {
 				nodesOnRay.push(node);
 			}
 		}
-
+		
 		return nodesOnRay;
 	}
 
@@ -604,7 +615,6 @@ export class PointCloudOctree extends PointCloudTree {
 	 *
 	 */
 	pick(viewer, camera, ray, params = {}){
-
 		let renderer = viewer.renderer;
 		let pRenderer = viewer.pRenderer;
 
@@ -625,7 +635,7 @@ export class PointCloudOctree extends PointCloudTree {
 		let pointSizeType = getVal(params.pointSizeType, this.material.pointSizeType);
 		let pointSize = getVal(params.pointSize, this.material.size);
 
-		let nodes = this.nodesOnRay(this.visibleNodes, ray);
+		let nodes = this.nodesOnRay(this.visibleNodes, ray, camera);
 
 		if (nodes.length === 0) {
 			return null;
@@ -817,6 +827,15 @@ export class PointCloudOctree extends PointCloudTree {
 
 					let position = new THREE.Vector3(x, y, z);
 					position.applyMatrix4(pc.matrixWorld);
+
+					//project back to global coordinates
+					if (camera.controls) {
+						let pos = camera.controls.unproject(node.pointcloud.projection, position);
+
+						position.x = pos.x;
+						position.y = pos.y;
+						position.z = pos.z;
+					}
 
 					point[attributeName] = position;
 				} else if (attributeName === 'indices') {
