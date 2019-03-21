@@ -130,8 +130,9 @@ export class ProfileRequest {
 				exports.lru.touch(node);
 				this.highestLevelServed = Math.max(node.getLevel(), this.highestLevelServed);
 
-				let doTraverse = (node.level % node.pcoGeometry.hierarchyStepSize) === 0 && node.hasChildren;
+				let doTraverse =  node.hasChildren;
 				doTraverse = doTraverse || node.getLevel() === 0;
+
 				if (doTraverse) {
 					this.traverse(node);
 				}
@@ -188,13 +189,17 @@ export class ProfileRequest {
 		let svp = new THREE.Vector3();
 
 		let view = new Float32Array(node.geometry.attributes.position.array);
+		view = view.subarray(0, numPoints * 3)
+
+		let bb = node.geometry.boundingBox;
+		let size = [bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z];
 
 		for (let i = 0; i < numPoints; i++) {
 
 			pos.set(
-				view[i * 3 + 0],
-				view[i * 3 + 1],
-				view[i * 3 + 2]);
+				view[i * 3 + 0] * size[0],
+				view[i * 3 + 1] * size[1],
+				view[i * 3 + 2] * size[2]);
 		
 			pos.applyMatrix4(matrix);
 			let distance = Math.abs(segment.cutPlane.distanceToPoint(pos));
@@ -315,19 +320,16 @@ export class ProfileRequest {
 
 				let relevantAttributes = Object.keys(geometry.attributes).filter(a => !["position", "indices"].includes(a));
 				for(let attributeName of relevantAttributes){
-
 					let attribute = geometry.attributes[attributeName];
-					let numElements = attribute.array.length / numPoints;
-
+					let source = attribute.array.subarray(0, attribute.itemSize * numPoints);
+					let numElements = source.length / numPoints;
+					
 					if(numElements !== parseInt(numElements)){
 						debugger;
 					}
 
-					let Type = attribute.array.constructor;
+					let filteredBuffer = new (source.constructor)(numElements * accepted.length);
 
-					let filteredBuffer = new Type(numElements * accepted.length);
-
-					let source = attribute.array;
 					let target = filteredBuffer;
 
 					for(let i = 0; i < accepted.length; i++){

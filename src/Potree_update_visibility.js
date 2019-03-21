@@ -222,10 +222,27 @@ export function updateVisibility(pointclouds, camera, renderer){
 			//	var a = 10;
 			//}
 
-			for(let clipBox of clipBoxes){
+			for (let clipBox of clipBoxes){
 
 				let pcWorldInverse = new THREE.Matrix4().getInverse(pointcloud.matrixWorld);
-				let toPCObject = pcWorldInverse.multiply(clipBox.box.matrixWorld);
+				let clipBoxMatrix = clipBox.matrixWorld
+
+				if (Math.Vector && camera.controls && camera.controls.project){
+					let p = camera.controls.project(pointcloud.projection);
+					let mat = Math.mat4(clipBoxMatrix.elements);
+
+					try {
+						let origin = p(Math.vec3(0).multiply(mat));
+						let x = p(Math.vec3(1, 0, 0).multiply(mat)).subtract(origin);
+						let y = p(Math.vec3(0, 1, 0).multiply(mat)).subtract(origin);
+						let z = p(Math.vec3(0, 0, 1).multiply(mat)).subtract(origin);
+
+						clipBoxMatrix = new THREE.Matrix4();
+						clipBoxMatrix.elements = Math.mat4(x, 0, y, 0, z, 0, origin, 1);
+					}catch (e){}
+				}
+
+				let toPCObject = pcWorldInverse.multiply(clipBoxMatrix);
 
 				let px = new THREE.Vector3(+0.5, 0, 0).applyMatrix4(pcWorldInverse);
 				let nx = new THREE.Vector3(-0.5, 0, 0).applyMatrix4(pcWorldInverse);

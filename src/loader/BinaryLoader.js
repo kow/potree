@@ -110,7 +110,7 @@ export class BinaryLoader{
 			let data = e.data;
 			let buffers = Object.create(data.attributeBuffers);
 			let parent = node.parent;
-			if (node.level >= 3) return;
+			
 			if (parent){
 				let min = parent.boundingBox.min;
 				let max = parent.boundingBox.max;
