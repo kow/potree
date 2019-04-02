@@ -64,6 +64,8 @@ export class ProfileRequest {
 
 	initialize () {
 		this.priorityQueue.push({node: this.pointcloud.pcoGeometry.root, weight: Infinity});
+
+		return this.load();
 	};
 
 	// traverse the node and add intersecting descendants to queue
@@ -94,87 +96,79 @@ export class ProfileRequest {
 		}
 	}
 
-	update(){
-		if(!this.updateGeneratorInstance){
-			this.updateGeneratorInstance = this.updateGenerator();
-		}
+	update () {}
 
-		let result = this.updateGeneratorInstance.next();
-		if(result.done){
-			this.updateGeneratorInstance = null;
-		}
-	}
+	async load(){
+		while (this.priorityQueue.size()){
+			// load nodes in queue
+			// if hierarchy expands, also load nodes from expanded hierarchy
+			// once loaded, add data to this.points and remove node from queue
+			// only evaluate 1-50 nodes per frame to maintain responsiveness
+			
+			let start = performance.now();
 
-	* updateGenerator(){
-		// load nodes in queue
-		// if hierarchy expands, also load nodes from expanded hierarchy
-		// once loaded, add data to this.points and remove node from queue
-		// only evaluate 1-50 nodes per frame to maintain responsiveness
+			let maxNodesPerUpdate = 1;
+			let intersectedNodes = [];
 
-		let start = performance.now();
+			for (let i = 0; i < Math.min(maxNodesPerUpdate, this.priorityQueue.size()); i++) {
+				let element = this.priorityQueue.pop();
+				let node = element.node;
 
-		let maxNodesPerUpdate = 1;
-		let intersectedNodes = [];
-
-		for (let i = 0; i < Math.min(maxNodesPerUpdate, this.priorityQueue.size()); i++) {
-			let element = this.priorityQueue.pop();
-			let node = element.node;
-
-			if(node.level > this.maxDepth){
-				continue;
-			}
-
-			if (node.loaded) {
-				// add points to result
-				intersectedNodes.push(node);
-				exports.lru.touch(node);
-				this.highestLevelServed = Math.max(node.getLevel(), this.highestLevelServed);
-
-				let doTraverse =  node.hasChildren;
-				doTraverse = doTraverse || node.getLevel() === 0;
-
-				if (doTraverse) {
-					this.traverse(node);
+				if(node.level > this.maxDepth){
+					continue;
 				}
-			} else {
-				node.load();
-				this.priorityQueue.push(element);
-			}
-		}
 
-		if (intersectedNodes.length > 0) {
+				if (node.loaded) {
+					// add points to result
+					intersectedNodes.push(node);
+					exports.lru.touch(node);
+					this.highestLevelServed = Math.max(node.getLevel(), this.highestLevelServed);
 
-			for(let done of this.getPointsInsideProfile(intersectedNodes, this.temporaryResult)){
-				if(!done){
-					//console.log("updateGenerator yields");
-					yield false;
+					let doTraverse =  node.hasChildren;
+					doTraverse = doTraverse || node.getLevel() === 0;
+
+					if (doTraverse) {
+						this.traverse(node);
+					}
+				} else {
+					node.load();
+					this.priorityQueue.push(element);
 				}
 			}
-			if (this.temporaryResult.size() > 100) {
-				this.pointsServed += this.temporaryResult.size();
-				this.callback.onProgress({request: this, points: this.temporaryResult});
-				this.temporaryResult = new ProfileData(this.profile);
+			
+			if (intersectedNodes.length > 0) {
+
+				for(let done of this.getPointsInsideProfile(intersectedNodes, this.temporaryResult)){
+					if(!done){
+						await new Promise (ok => setTimeout(ok));
+					}
+				}
+				if (this.temporaryResult.size() > 100) {
+					this.pointsServed += this.temporaryResult.size();
+					this.callback.onProgress({request: this, points: this.temporaryResult});
+					this.temporaryResult = new ProfileData(this.profile);
+				}
 			}
+
+			if (this.priorityQueue.size() === 0) {
+				// we're done! inform callback and remove from pending requests
+
+				if (this.temporaryResult.size() > 0) {
+					this.pointsServed += this.temporaryResult.size();
+					this.callback.onProgress({request: this, points: this.temporaryResult});
+					this.temporaryResult = new ProfileData(this.profile);
+				}
+
+				this.callback.onFinish({request: this});
+
+				let index = this.pointcloud.profileRequests.indexOf(this);
+				if (index >= 0) {
+					this.pointcloud.profileRequests.splice(index, 1);
+				}
+			}
+
+			await new Promise (ok => setTimeout(ok));
 		}
-
-		if (this.priorityQueue.size() === 0) {
-			// we're done! inform callback and remove from pending requests
-
-			if (this.temporaryResult.size() > 0) {
-				this.pointsServed += this.temporaryResult.size();
-				this.callback.onProgress({request: this, points: this.temporaryResult});
-				this.temporaryResult = new ProfileData(this.profile);
-			}
-
-			this.callback.onFinish({request: this});
-
-			let index = this.pointcloud.profileRequests.indexOf(this);
-			if (index >= 0) {
-				this.pointcloud.profileRequests.splice(index, 1);
-			}
-		}
-
-		yield true;
 	};
 
 	* getAccepted(numPoints, node, matrix, segment, segmentDir, points, totalMileage){

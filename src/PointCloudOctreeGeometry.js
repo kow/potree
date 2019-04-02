@@ -116,122 +116,117 @@ export class PointCloudOctreeGeometryNode extends PointCloudTreeNode{
 		child.parent = this;
 	}
 
-	load(){
-		if (this.loading === true || this.loaded === true || Potree.numNodesLoading >= Potree.maxNodesLoading) {
+	async load(){
+		if (this.loaded) return;
+		if (this.parent) await this.parent.load();
+		if (this.loading) {
+			await this.loading;
 			return;
 		}
 
-		this.loading = true;
+		if (!Potree.nodesLoading) Potree.nodesLoading = [];
 
-		Potree.numNodesLoading++;
+		while (Potree.numNodesLoading >= Potree.maxNodesLoading){
+			await Promise.race(Potree.nodesLoading.slice());
 
-		if (this.pcoGeometry.loader.version.equalOrHigher('1.5')) {
-			if ((this.level % this.pcoGeometry.hierarchyStepSize) === 0 && this.hasChildren) {
-				this.loadHierachyThenPoints();
-			} else {
-				this.loadPoints();
+			if (this.loading) {
+				await this.loading;
+				return;
 			}
-		} else {
-			this.loadPoints();
 		}
+
+		let loading = this.loading = (async () => {
+			Potree.numNodesLoading++;
+
+			if (this.pcoGeometry.loader.version.equalOrHigher('1.5') && (this.level % this.pcoGeometry.hierarchyStepSize) === 0 && this.hasChildren) {
+				await this.loadHierachyThenPoints();
+			} else {
+				await this.loadPoints();
+			}
+			
+			Potree.nodesLoading.splice(Potree.nodesLoading.indexOf(loading), 1)
+		})();
+
+		Potree.nodesLoading.push(loading);
+
+		await loading
 	}
 
 	loadPoints(){
-		this.pcoGeometry.loader.load(this);
+		return this.pcoGeometry.loader.load(this);
 	}
 
-	loadHierachyThenPoints(){
+	async loadHierachyThenPoints(){
+		if ((node.level % node.pcoGeometry.hierarchyStepSize) !== 0) return;
+
 		let node = this;
+		// let hurl = node.pcoGeometry.octreeDir + "/../hierarchy/" + node.name + ".hrc";
+		let hurl = node.pcoGeometry.octreeDir + '/' + node.getHierarchyPath() + '/' + node.name + '.hrc';
 
-		// load hierarchy
-		let callback = function (node, hbuffer) {
-			let view = new DataView(hbuffer);
+		let req = await fetch(hurl);
+		let hbuffer = await req.arrayBuffer();
 
-			let stack = [];
-			let children = view.getUint8(0);
-			let numPoints = view.getUint32(1, true);
-			node.numPoints = numPoints;
-			stack.push({children: children, numPoints: numPoints, name: node.name});
+		let view = new DataView(hbuffer);
 
-			let decoded = [];
+		let stack = [];
+		let children = view.getUint8(0);
+		let numPoints = view.getUint32(1, true);
+		node.numPoints = numPoints;
+		stack.push({children: children, numPoints: numPoints, name: node.name});
 
-			let offset = 5;
-			while (stack.length > 0) {
-				let snode = stack.shift();
-				let mask = 1;
-				for (let i = 0; i < 8; i++) {
-					if ((snode.children & mask) !== 0) {
-						let childName = snode.name + i;
+		let decoded = [];
 
-						let childChildren = view.getUint8(offset);
-						let childNumPoints = view.getUint32(offset + 1, true);
+		let offset = 5;
+		while (stack.length > 0) {
+			let snode = stack.shift();
+			let mask = 1;
+			for (let i = 0; i < 8; i++) {
+				if ((snode.children & mask) !== 0) {
+					let childName = snode.name + i;
 
-						stack.push({children: childChildren, numPoints: childNumPoints, name: childName});
+					let childChildren = view.getUint8(offset);
+					let childNumPoints = view.getUint32(offset + 1, true);
 
-						decoded.push({children: childChildren, numPoints: childNumPoints, name: childName});
+					stack.push({children: childChildren, numPoints: childNumPoints, name: childName});
 
-						offset += 5;
-					}
+					decoded.push({children: childChildren, numPoints: childNumPoints, name: childName});
 
-					mask = mask * 2;
+					offset += 5;
 				}
 
-				if (offset === hbuffer.byteLength) {
-					break;
-				}
+				mask = mask * 2;
 			}
 
-			// console.log(decoded);
-
-			let nodes = {};
-			nodes[node.name] = node;
-			let pco = node.pcoGeometry;
-
-			for (let i = 0; i < decoded.length; i++) {
-				let name = decoded[i].name;
-				let decodedNumPoints = decoded[i].numPoints;
-				let index = parseInt(name.charAt(name.length - 1));
-				let parentName = name.substring(0, name.length - 1);
-				let parentNode = nodes[parentName];
-				let level = name.length - 1;
-				let boundingBox = Utils.createChildAABB(parentNode.boundingBox, index);
-
-				let currentNode = new PointCloudOctreeGeometryNode(name, pco, boundingBox);
-				currentNode.level = level;
-				currentNode.numPoints = decodedNumPoints;
-				currentNode.hasChildren = decoded[i].children > 0;
-				currentNode.spacing = pco.spacing / Math.pow(2, level);
-				parentNode.addChild(currentNode);
-				nodes[name] = currentNode;
-			}
-
-			node.loadPoints();
-		};
-		if ((node.level % node.pcoGeometry.hierarchyStepSize) === 0) {
-			// let hurl = node.pcoGeometry.octreeDir + "/../hierarchy/" + node.name + ".hrc";
-			let hurl = node.pcoGeometry.octreeDir + '/' + node.getHierarchyPath() + '/' + node.name + '.hrc';
-
-			let xhr = XHRFactory.createXMLHttpRequest();
-			xhr.open('GET', hurl, true);
-			xhr.responseType = 'arraybuffer';
-			xhr.overrideMimeType('text/plain; charset=x-user-defined');
-			xhr.onreadystatechange = () => {
-				if (xhr.readyState === 4) {
-					if (xhr.status === 200 || xhr.status === 0) {
-						let hbuffer = xhr.response;
-						callback(node, hbuffer);
-					} else {
-						console.log('Failed to load file! HTTP status: ' + xhr.status + ', file: ' + hurl);
-						Potree.numNodesLoading--;
-					}
-				}
-			};
-			try {
-				xhr.send(null);
-			} catch (e) {
-				console.log('fehler beim laden der punktwolke: ' + e);
+			if (offset === hbuffer.byteLength) {
+				break;
 			}
 		}
+
+		// console.log(decoded);
+
+		let nodes = {};
+		nodes[node.name] = node;
+		let pco = node.pcoGeometry;
+
+		for (let i = 0; i < decoded.length; i++) {
+			let name = decoded[i].name;
+			let decodedNumPoints = decoded[i].numPoints;
+			let index = parseInt(name.charAt(name.length - 1));
+			let parentName = name.substring(0, name.length - 1);
+			let parentNode = nodes[parentName];
+			let level = name.length - 1;
+			let boundingBox = Utils.createChildAABB(parentNode.boundingBox, index);
+
+			let currentNode = new PointCloudOctreeGeometryNode(name, pco, boundingBox);
+			currentNode.level = level;
+			currentNode.numPoints = decodedNumPoints;
+			currentNode.hasChildren = decoded[i].children > 0;
+			currentNode.spacing = pco.spacing / Math.pow(2, level);
+			parentNode.addChild(currentNode);
+			nodes[name] = currentNode;
+		}
+
+		await node.loadPoints();
 	}
 
 	getNumPoints(){
@@ -239,6 +234,7 @@ export class PointCloudOctreeGeometryNode extends PointCloudTreeNode{
 	}
 
 	dispose(){
+		console.trace()
 		if (this.geometry && this.parent != null) {
 			this.geometry.dispose();
 			this.geometry = null;

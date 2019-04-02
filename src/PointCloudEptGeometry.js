@@ -189,19 +189,41 @@ export class PointCloudEptGeometryNode extends PointCloudTreeNode {
 		child.parent = this;
 	}
 
-	load() {
-		if (this.loaded || this.loading) return;
-		if (Potree.numNodesLoading >= Potree.maxNodesLoading) return;
+	async load() {
+		if (this.loaded) return;
+		if (this.parent) await this.parent.load();
+		if (this.loading) {
+			await this.loading;
+			return;
+		}
 
-		this.loading = true;
-		++Potree.numNodesLoading;
+		if (!Potree.nodesLoading) Potree.nodesLoading = [];
 
-		if (this.numPoints == -1) this.loadHierarchy();
-		this.loadPoints();
+		while (Potree.numNodesLoading >= Potree.maxNodesLoading){
+			await Promise.race(Potree.nodesLoading.slice());
+
+			if (this.loading) {
+				await this.loading;
+				return;
+			}
+		}
+
+		let loading = this.loading = (async () => {
+			Potree.numNodesLoading++;
+
+			if (this.numPoints == -1) await this.loadHierarchy();
+			await this.loadPoints();
+			
+			Potree.nodesLoading.splice(Potree.nodesLoading.indexOf(loading), 1)
+		})();
+		
+		Potree.nodesLoading.push(loading);
+
+		await loading
 	}
 
 	loadPoints(){
-		this.ept.loader.load(this);
+		return this.ept.loader.load(this);
 	}
 
 	async loadHierarchy() {

@@ -1224,7 +1224,13 @@ export class Viewer extends EventDispatcher{
 		let scene = this.scene;
 		let camera = scene.getActiveCamera();
 		
-		Potree.pointLoadLimit = Potree.pointBudget * 2;
+		if (this.oldPointBudget){
+			Potree.pointLoadLimit += ((Potree.pointBudget * 2) - Potree.pointLoadLimit) * 0.001;
+		}else{
+			Potree.pointLoadLimit = Potree.pointBudget * 2;
+		}
+
+		this.oldPointBudget = Potree.pointBudget;
 
 		this.scene.directionalLight.position.copy(camera.position);
 		this.scene.directionalLight.lookAt(new THREE.Vector3().addVectors(camera.position, camera.getWorldDirection(new THREE.Vector3())));

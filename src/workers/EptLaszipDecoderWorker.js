@@ -49,8 +49,8 @@ function readUsingDataView(event) {
 	let co = pointFormat == 2 ? 20 : 28;
 
 	// TODO This should be cached per-resource since this is an expensive check.
-	let twoByteColor = false;
-	if (hasColor) {
+	let twoByteColor = true;
+	/*if (hasColor) {
 		let r, g, b, pos;
 		for (let i = 0; i < numPoints && !twoByteColor; ++i) {
 			pos = i * pointSize;
@@ -59,7 +59,7 @@ function readUsingDataView(event) {
 			b = sourceView.getUint16(pos + co + 4, true)
 			if (r > 255 || g > 255 || b > 255) twoByteColor = true;
 		}
-	}
+	}*/
 
 	for (let i = 0; i < numPoints; i++) {
 		// POSITION

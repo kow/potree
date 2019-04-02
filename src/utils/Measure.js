@@ -179,8 +179,8 @@ export class Measure extends THREE.Object3D {
 				}
 			};
 
-			let mouseover = (e) => e.object.material.emissive.setHex(0x888888);
-			let mouseleave = (e) => e.object.material.emissive.setHex(0x000000);
+			let mouseover = (e) => e.object.material.color.setHex(0x888888);
+			let mouseleave = (e) => e.object.material.color.setHex(0xFF0000);
 
 			sphere.addEventListener('drag', drag);
 			sphere.addEventListener('drop', drop);
@@ -347,7 +347,6 @@ export class Measure extends THREE.Object3D {
 
 			// spheres
 			sphere.position.copy(point.position);
-			sphere.material.color = this.color;
 
 			{ // edges
 				let edge = this.edges[index];

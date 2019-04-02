@@ -130,7 +130,6 @@ export function updateVisibility(pointclouds, camera, renderer){
 
 	let visibleNodes = [];
 	let visibleGeometry = [];
-	let unloadedGeometry = [];
 
 	let lowestSpacing = Infinity;
 
@@ -347,7 +346,7 @@ export function updateVisibility(pointclouds, camera, renderer){
 				node = pointcloud.toTreeNode(node, parent);
 				loadedToGPUThisFrame++;
 			} else {
-				unloadedGeometry.push(node);
+				node.load();
 				visibleGeometry.push(node);
 			}
 		}
@@ -441,10 +440,6 @@ export function updateVisibility(pointclouds, camera, renderer){
 			let updatingNodes = pointcloud.visibleNodes.filter(n => n.getLevel() <= maxDEMLevel);
 			pointcloud.dem.update(updatingNodes);
 		}
-	}
-
-	for (let i = 0; i < Math.min(Potree.maxNodesLoading, unloadedGeometry.length); i++) {
-		unloadedGeometry[i].load();
 	}
 
 	return {
