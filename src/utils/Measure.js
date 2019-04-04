@@ -373,7 +373,7 @@ export class Measure extends THREE.Object3D {
 
 				edgeLabel.position.copy(center);
 				distance = distance / this.lengthUnit.unitspermeter * this.lengthUnitDisplay.unitspermeter;  //convert to meters then to the display unit
-				edgeLabel.setText(Utils.addCommas(distance.toFixed(2)) + ' ' + this.lengthUnitDisplay.code);
+				edgeLabel.setText(Utils.addCommas(distance.toFixed(1)) + ' ' + this.lengthUnitDisplay.code);
 				edgeLabel.visible = this.showDistances && (index < lastIndex || this.closed) && this.points.length >= 2 && distance > 0;
 			}
 

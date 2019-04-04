@@ -1,3 +1,23 @@
+let constructors = {
+	'position': Float32Array,
+	'color': Uint8Array,
+	'intensity': Float32Array,
+	'classification': Uint8Array,
+	'returnNumber': Uint8Array,
+	'numberOfReturns': Uint8Array,
+	'pointSourceID': Uint16Array
+}
+
+let strides = {
+	'position': 3,
+	'color': 4,
+	'intensity': 1,
+	'classification': 1,
+	'returnNumber': 1,
+	'numberOfReturns': 1,
+	'pointSourceID': 1
+}
+
 function readUsingDataView(event) {
 	performance.mark("laslaz-start");
 
@@ -126,10 +146,100 @@ function readUsingDataView(event) {
 		}
 	}
 
-	let indices = new ArrayBuffer(numPoints * 4);
-	let iIndices = new Uint32Array(indices);
-	for (let i = 0; i < numPoints; i++) {
-		iIndices[i] = i;
+	let attributes = {
+		position: positions,
+		color: colors,
+		intensity: intensities,
+		classification: classifications,
+		returnNumber: returnNumbers,
+		numberOfReturns: numberOfReturns,
+		pointSourceID: pointSourceIDs
+	}
+
+	if (event.data.parentSize){
+		let size = event.data.parentSize;
+
+		let pos = event.data.parentAttributes.position;
+		let i = event.data.parentIndex;
+
+		if (i < 8){
+			let count = 0;
+
+			let index = (i & 2) | ((i & 1) << 2) | ((i & 4) >> 2);
+			let arrays = [];
+
+			for (let ii = 0; ii < pos.length; ii += 3){
+				if (index == ((pos[ii] >= 0.5 ? 1 : 0) | (pos[ii + 1] >= 0.5 ? 2 : 0) | (pos[ii + 2] >= 0.5 ? 4 : 0))){
+					count++;
+				}
+			}
+
+			for (let o in attributes){
+				if (!constructors[o]) continue;
+
+				let pnode = event.data.parentAttributes[o];
+				let oarray = attributes[o];
+				let narray = new constructors[o](oarray.length + count * strides[o])
+				narray.set(oarray);
+
+				attributes[o] = narray;
+
+				let obj = {
+					parray: pnode,
+					array: narray,
+					index: oarray.length,
+					stride: strides[o],
+					pos: o == 'position'
+				};
+
+				if (obj.pos){
+					arrays.splice(0, 0, obj);
+				}else{
+					arrays.push(obj);
+				}
+			}
+
+			let xoff = (index & 1) ? -0.5 : 0;
+			let yoff = (index & 2) ? -0.5 : 0;
+			let zoff = (index & 4) ? -0.5 : 0;
+
+			for (let ii = 0; ii < pos.length / 3; ii++){
+				if (index == ((pos[ii * 3] >= 0.5 ? 1 : 0) | (pos[ii * 3 + 1] >= 0.5 ? 2 : 0) | (pos[ii * 3 + 2] >= 0.5 ? 4 : 0))){
+					for (let p of arrays){
+						let off = ii * p.stride;
+
+						if (p.pos){
+							p.array[p.index++] = (p.parray[off + 0] + xoff) * size[0]
+							p.array[p.index++] = (p.parray[off + 1] + yoff) * size[1]
+							p.array[p.index++] = (p.parray[off + 2] + zoff) * size[2]
+						}else{
+							for (let iv = 0; iv < p.stride; iv++){
+								p.array[p.index++] = p.parray[off + iv]
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	{
+		let positions = attributes.position
+		let min = event.data.bbmin;
+		let max = event.data.bbmax;
+
+		let off = [0, 0, 0]
+		let size = [max[0] - min[0], max[1] - min[1], max[2] - min[2]];
+
+		for (let i = 0; i < positions.length; i += 3){
+			let x = positions[i + 0];
+			let y = positions[i + 1];
+			let z = positions[i + 2];
+
+			positions[i + 0] = (x - off[0]) / size[0];
+			positions[i + 1] = (y - off[1]) / size[1];
+			positions[i + 2] = (z - off[2]) / size[2];
+		}
 	}
 
 	performance.mark("laslaz-end");
@@ -144,15 +254,22 @@ function readUsingDataView(event) {
 	performance.clearMarks();
 	performance.clearMeasures();
 
+	let len = attributes.position.length / 3;
+	let indices = new ArrayBuffer(len * 4);
+	let iIndices = new Uint32Array(indices);
+	for (let i = 0; i < len; i++) {
+		iIndices[i] = i;
+	}
+
 	let message = {
 		mean: mean,
-		position: pBuff,
-		color: cBuff,
-		intensity: iBuff,
-		classification: clBuff,
-		returnNumber: rnBuff,
-		numberOfReturns: nrBuff,
-		pointSourceID: psBuff,
+		position: attributes.position.buffer,
+		color: attributes.color.buffer,
+		intensity: attributes.intensity.buffer,
+		classification: attributes.classification.buffer,
+		returnNumber: attributes.returnNumber.buffer,
+		numberOfReturns: attributes.numberOfReturns.buffer,
+		pointSourceID: attributes.pointSourceID.buffer,
 		tightBoundingBox: tightBoundingBox,
 		indices: indices
 	};
