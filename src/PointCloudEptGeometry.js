@@ -148,7 +148,7 @@ export class PointCloudEptGeometryNode extends PointCloudTreeNode {
 
 		// These are set during hierarchy loading.
 		this.hasChildren = false;
-		this.children = { };
+		this.children = [];
 		this.numPoints = -1;
 
 		this.level = this.key.d;
@@ -189,41 +189,9 @@ export class PointCloudEptGeometryNode extends PointCloudTreeNode {
 		child.parent = this;
 	}
 
-	async load() {
-		if (this.loaded) return;
-		if (this.parent) await this.parent.load();
-		if (this.loading) {
-			await this.loading;
-			return;
-		}
-
-		if (!Potree.nodesLoading) Potree.nodesLoading = [];
-
-		while (Potree.numNodesLoading >= Potree.maxNodesLoading){
-			await Promise.race(Potree.nodesLoading.slice());
-
-			if (this.loading) {
-				await this.loading;
-				return;
-			}
-		}
-
-		let loading = this.loading = (async () => {
-			Potree.numNodesLoading++;
-
-			if (this.numPoints == -1) await this.loadHierarchy();
-			await this.loadPoints();
-			
-			Potree.nodesLoading.splice(Potree.nodesLoading.indexOf(loading), 1)
-		})();
-		
-		Potree.nodesLoading.push(loading);
-
-		await loading
-	}
-
-	loadPoints(){
-		return this.ept.loader.load(this);
+	async loadPoints(){
+		if (this.numPoints == -1) await this.loadHierarchy();
+		return await this.ept.loader.load(this);
 	}
 
 	async loadHierarchy() {
@@ -283,9 +251,6 @@ export class PointCloudEptGeometryNode extends PointCloudTreeNode {
 		this.tightBoundingBox = tightBoundingBox;
 		this.numPoints = np;
 		this.mean = mean;
-		this.loaded = true;
-		this.loading = false;
-		--Potree.numNodesLoading;
 	}
 
 	toPotreeName(d, x, y, z) {

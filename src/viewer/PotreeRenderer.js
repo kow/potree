@@ -1,3 +1,4 @@
+import {PointCloudTree} from "../PointCloudTree.js";
 
 export class PotreeRenderer {
 
@@ -39,12 +40,13 @@ export class PotreeRenderer {
 		let activeCam = viewer.scene.getActiveCamera();
 		//viewer.renderer.render(viewer.scene.scenePointCloud, activeCam);
 		
-		viewer.pRenderer.render(viewer.scene.scenePointCloud, activeCam, null, {
+		this.traverse(viewer.scene.scenePointCloud, activeCam, {
 			clipSpheres: viewer.scene.volumes.filter(v => (v instanceof Potree.SphereVolume)),
 		});
 		
 		// render scene
-		viewer.renderer.render(viewer.scene.scene, activeCam);
+		this.viewer.renderer.render(viewer.scene.scene, activeCam);
+		//this.traverse(viewer.scene.scene, activeCam);
 
 		viewer.dispatchEvent({type: "render.pass.scene",viewer: viewer});
 		
@@ -71,4 +73,20 @@ export class PotreeRenderer {
 		viewer.dispatchEvent({type: "render.pass.end",viewer: viewer});
 	}
 
+	traverse(scene, camera, options) {
+		let stack = [scene];
+		while (stack.length > 0) {
+
+			let node = stack.pop();
+
+			if (node instanceof PointCloudTree) {
+				this.viewer.pRenderer.render(node, camera, null, options);
+			}else if (node instanceof THREE.Scene){
+				let visibleChildren = node.children.filter(c => c.visible);
+				stack.push(...visibleChildren);
+			}else{
+				//this.viewer.renderer.render(node, camera)
+			}
+		}
+	}
 }

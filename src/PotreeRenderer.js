@@ -640,34 +640,6 @@ export class Renderer {
 		gl.bindVertexArray(null);
 	}
 
-	traverse(scene) {
-
-		let octrees = [];
-
-		let stack = [scene];
-		while (stack.length > 0) {
-
-			let node = stack.pop();
-
-			if (node instanceof PointCloudTree) {
-				octrees.push(node);
-				continue;
-			}
-
-			let visibleChildren = node.children.filter(c => c.visible);
-			stack.push(...visibleChildren);
-
-		}
-
-		let result = {
-			octrees: octrees
-		};
-
-		return result;
-	}
-
-
-
 	renderNode(octree, node, transform, target, shader, params = {}) {
 		let gl = this.gl;
 
@@ -725,8 +697,8 @@ export class Renderer {
 			}*/
 
 			gl.uniformMatrix4fv(shader.uniformLocations["modelViewMatrix"], false, transform.elements);
-
 			shader.setUniform1f("uLevel", level);
+			shader.setUniform1f("uNodeSpacing", node.geometryNode.spacing);
 			shader.setUniform1f("setChildren", childrenMasking);
 
 			let geometry = node.geometryNode.geometry;
@@ -1268,7 +1240,7 @@ export class Renderer {
 		}
 	}
 
-	render(scene, camera, target = null, params = {}) {
+	render(octree, camera, target = null, params = {}) {
 		const gl = this.gl;
 
 		// PREPARE 
@@ -1277,14 +1249,7 @@ export class Renderer {
 		}
 
 		camera.updateProjectionMatrix();
-
-		const traversalResult = this.traverse(scene);
-		
-		// RENDER
-		for (const octree of traversalResult.octrees) {
-			this.renderOctree(octree, camera, target, params);
-		}
-
+		this.renderOctree(octree, camera, target, params);
 
 		// CLEANUP
 		gl.bindVertexArray(null);

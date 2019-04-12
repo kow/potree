@@ -245,11 +245,8 @@ export class BinaryLoader{
 		node.geometry = geometry;
 		node.mean = new THREE.Vector3(...data.mean);
 		node.tightBoundingBox = new THREE.Box3(new THREE.Vector3(0, 0, 0), new THREE.Vector3(1, 1, 1));
-		node.loaded = true;
-		node.loading = false;
 		node.estimatedSpacing = data.estimatedSpacing;
 		//node.boundingBox = new THREE.Box3(new THREE.Vector3(0, 0, 0), new THREE.Vector3(1, 1, 1));
-		Potree.numNodesLoading--;
 	};
 
 	

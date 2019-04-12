@@ -5,6 +5,8 @@ import {PointColorType} from "../defines.js";
 import {SphereVolume} from "../utils/Volume.js";
 import {Utils} from "../utils.js";
 
+import {PointCloudTree} from "../PointCloudTree.js";
+
 export class EDLRenderer{
 	constructor(viewer){
 		this.viewer = viewer;
@@ -225,20 +227,26 @@ export class EDLRenderer{
 			material.uniforms.octreeSize.value = octreeSize;
 			material.spacing = pointcloud.pcoGeometry.spacing * Math.max(pointcloud.scale.x, pointcloud.scale.y, pointcloud.scale.z);
 		}
+
+		let options = null;
 		
 		// TODO adapt to multiple lights
 		if(lights.length > 0){
-			viewer.pRenderer.render(viewer.scene.scenePointCloud, camera, this.rtEDL, {
+			options = {
 				clipSpheres: viewer.scene.volumes.filter(v => (v instanceof SphereVolume)),
 				shadowMaps: [this.shadowMap],
 				transparent: false,
-			});
+			}
 		}else{
-			viewer.pRenderer.render(viewer.scene.scenePointCloud, camera, this.rtEDL, {
+			options = {
 				clipSpheres: viewer.scene.volumes.filter(v => (v instanceof SphereVolume)),
 				transparent: false,
-			});
+			}
 		}
+
+		this.traverse (viewer.scene.scenePointCloud, camera, this.rtEDL, options)
+		this.viewer.renderer.render(viewer.scene.scene, camera)
+		//this.traverse (viewer.scene.scene, camera, this.rtEDL, options)
 
 		//viewer.renderer.render(viewer.scene.scene, camera, this.rtRegular);
 		viewer.renderer.render(viewer.scene.scene, camera);
@@ -294,6 +302,23 @@ export class EDLRenderer{
 
 		viewer.dispatchEvent({type: "render.pass.end",viewer: viewer});
 
+	}
+
+	traverse(scene, camera, whatever, options) {
+		let stack = [scene];
+		while (stack.length > 0) {
+
+			let node = stack.pop();
+
+			if (node instanceof PointCloudTree) {
+				this.viewer.pRenderer.render(node, camera, whatever, options);
+			}else if (node instanceof THREE.Scene){
+				let visibleChildren = node.children.filter(c => c.visible);
+				stack.push(...visibleChildren);
+			}else{
+				this.viewer.renderer.render(node, camera)	
+			}
+		}
 	}
 }
 

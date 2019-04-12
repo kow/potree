@@ -32,7 +32,7 @@ export class PointCloudOctreeGeometryNode extends PointCloudTreeNode{
 		this.geometry = null;
 		this.boundingBox = boundingBox;
 		this.boundingSphere = boundingBox.getBoundingSphere(new THREE.Sphere());
-		this.children = {};
+		this.children = [];
 		this.numPoints = 0;
 		this.level = null;
 		this.loaded = false;
@@ -116,44 +116,12 @@ export class PointCloudOctreeGeometryNode extends PointCloudTreeNode{
 		child.parent = this;
 	}
 
-	async load(){
-		if (this.loaded) return;
-		if (this.parent) await this.parent.load();
-		if (this.loading) {
-			await this.loading;
-			return;
-		}
-
-		if (!Potree.nodesLoading) Potree.nodesLoading = [];
-
-		while (Potree.numNodesLoading >= Potree.maxNodesLoading){
-			await Promise.race(Potree.nodesLoading.slice());
-
-			if (this.loading) {
-				await this.loading;
-				return;
-			}
-		}
-
-		let loading = this.loading = (async () => {
-			Potree.numNodesLoading++;
-
-			if (this.pcoGeometry.loader.version.equalOrHigher('1.5') && (this.level % this.pcoGeometry.hierarchyStepSize) === 0 && this.hasChildren) {
-				await this.loadHierachyThenPoints();
-			} else {
-				await this.loadPoints();
-			}
-			
-			Potree.nodesLoading.splice(Potree.nodesLoading.indexOf(loading), 1)
-		})();
-
-		Potree.nodesLoading.push(loading);
-
-		await loading
-	}
-
 	loadPoints(){
-		return this.pcoGeometry.loader.load(this);
+		if (this.pcoGeometry.loader.version.equalOrHigher('1.5') && (this.level % this.pcoGeometry.hierarchyStepSize) === 0 && this.hasChildren) {
+			return this.loadHierachyThenPoints();
+		} else {
+			return this.pcoGeometry.loader.load(this);
+		}
 	}
 
 	async loadHierachyThenPoints(){
@@ -234,7 +202,6 @@ export class PointCloudOctreeGeometryNode extends PointCloudTreeNode{
 	}
 
 	dispose(){
-		console.trace()
 		if (this.geometry && this.parent != null) {
 			this.geometry.dispose();
 			this.geometry = null;

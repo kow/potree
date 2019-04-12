@@ -37,6 +37,38 @@ export class PointCloudTreeNode extends EventDispatcher{
 	getBoundingSphere () {
 		throw new Error('override function');
 	}
+
+	async load(){
+		if (this.loaded) return;
+		if (this.parent && !this.parent.loaded) await this.parent.load();
+		if (this.loading) {
+			await this.loading;
+			return;
+		}
+
+		if (!Potree.nodesLoading) Potree.nodesLoading = [];
+
+		this.loading = (async () => {
+			await new Promise(ok => setTimeout(ok))
+
+			while (Potree.nodesLoading.length >= Potree.maxNodesLoading){
+				await Promise.race(Potree.nodesLoading.slice());
+			}
+			
+			Potree.nodesLoading.push(this.loading);
+			Potree.numNodesLoading++;
+
+			await this.loadPoints();
+			
+			Potree.nodesLoading.splice(Potree.nodesLoading.indexOf(this.loading), 1)
+			this.loaded = true;
+			this.loading = null;
+			Potree.numNodesLoading--;
+
+		})();
+
+		await this.loading;
+	}
 };
 
 export class PointCloudTree extends THREE.Object3D {

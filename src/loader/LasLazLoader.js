@@ -229,9 +229,6 @@ export class LasLazBatcher{
 
 			this.node.geometry = geometry;
 			this.node.numPoints = numPoints;
-			this.node.loaded = true;
-			this.node.loading = false;
-			Potree.numNodesLoading--;
 			this.node.mean = new THREE.Vector3(...e.data.mean);
 
 			//debugger;

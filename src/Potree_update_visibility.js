@@ -130,6 +130,7 @@ export function updateVisibility(pointclouds, camera, renderer){
 
 	let visibleNodes = [];
 	let visibleGeometry = [];
+	let unloadedGeometry = [];
 
 	let lowestSpacing = Infinity;
 
@@ -346,7 +347,7 @@ export function updateVisibility(pointclouds, camera, renderer){
 				node = pointcloud.toTreeNode(node, parent);
 				loadedToGPUThisFrame++;
 			} else {
-				node.load();
+				unloadedGeometry.push(node);
 				visibleGeometry.push(node);
 			}
 		}
@@ -442,10 +443,13 @@ export function updateVisibility(pointclouds, camera, renderer){
 		}
 	}
 
+	for (let i = 0; i < Math.min(Potree.maxNodesLoading * 2, unloadedGeometry.length); i++) {
+		unloadedGeometry[i].load();
+	}
+
 	return {
 		visibleNodes: visibleNodes,
 		numVisiblePoints: numVisiblePoints,
 		lowestSpacing: lowestSpacing
 	};
 };
-
