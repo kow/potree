@@ -678,16 +678,17 @@ export class Renderer {
 		if (!params.nodeList || (PCIndex = params.nodeList.indexOf(node)) >= 0){
 			for (var ii = 0; ii < 8; ii++){
 				let child = node.children[ii];
+				let index = (ii & 2) | ((ii & 1) << 2) | ((ii & 4) >> 2);
 
 				if (child && child.sceneNode && child.sceneNode.visible){
-					let index = (ii & 2) | ((ii & 1) << 2) | ((ii & 4) >> 2);
-
 					childrenMasking |= 1 << index;
 					children[index] = node.children[ii];
+				}else if (node.geometryNode && node.geometryNode.pointCounts[index] == 0){
+					childrenMasking |= 1 << index;
 				}
 			}
 		}
-
+		
 		//render this node
 		if (node.geometryNode && childrenMasking != 255){
 			/*const lModel = shader.uniformLocations["modelMatrix"];
@@ -787,7 +788,7 @@ export class Renderer {
 			gl.drawArrays(gl.POINTS, 0, webglBuffer.numElements);
 		}
 
-		if (childrenMasking != 0) for (var i = 0; i < 8; i++){
+		for (var i = 0; i < 8; i++){
 			if (children[i]){
 				var matrix = transform.clone();
 				matrix.scale(new THREE.Vector3(0.5, 0.5, 0.5));

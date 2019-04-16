@@ -343,7 +343,7 @@ export function updateVisibility(pointclouds, camera, renderer){
 		pointcloud.numVisiblePoints += node.getNumPoints();
 
 		if (node.isGeometryNode() && (!parent || parent.isTreeNode())) {
-			if (node.isLoaded() && loadedToGPUThisFrame < 2) {
+			if (node.isLoaded() && loadedToGPUThisFrame < 4) {
 				node = pointcloud.toTreeNode(node, parent);
 				loadedToGPUThisFrame++;
 			} else {

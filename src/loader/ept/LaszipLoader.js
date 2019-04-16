@@ -104,7 +104,7 @@ export class EptLaszipLoader {
 			maxs: las.maxs,
 
 			bbmin: [min.x, min.y, min.z],
-			bbmax: [max.x, max.y, max.z]
+			bbmax: [max.x, max.y, max.z],
 		};
 
 		let parent = node.parent;
@@ -116,12 +116,20 @@ export class EptLaszipLoader {
 
 			let i = 0;
 			for (i = 0; i < 8; i++) if (parent.children[i] == node) break;
+			let index = (i & 2) | ((i & 1) << 2) | ((i & 4) >> 2);
 
 			message.parentIndex = i;
 			message.parentAttributes = {}
+			message.pointCounts = node.parent.pointCounts
+
+			let count = node.parent.pointCounts[index];
+			let off = 0;
+			for (let ii = 0; ii < index; ii++) off += node.parent.pointCounts[ii];
 
 			for (let o in parent.geometry.attributes){
-				message.parentAttributes[o] = parent.geometry.attributes[o].array;
+				if (o == 'indices') continue;
+
+				message.parentAttributes[o] = parent.geometry.attributes[o].array.subarray(off * strides[o], (off + count) * strides[o]);
 			}
 		}
 
@@ -144,6 +152,8 @@ export class EptLaszipLoader {
 			new THREE.Vector3(0, 0, 0),
 			new THREE.Vector3(1, 1, 1)
 		);
+
+		node.pointCounts = e.data.pointCounts;
 
 		node.doneLoading(
 				g,

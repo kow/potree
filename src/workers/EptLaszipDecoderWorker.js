@@ -156,6 +156,23 @@ function readUsingDataView(event) {
 		pointSourceID: pointSourceIDs
 	}
 
+	let pointCounts = [0, 0, 0, 0, 0, 0, 0, 0]
+
+	//count all points and sort them into the 8 quadrents
+	{
+		let pos = positions;
+
+		let min = event.data.bbmin;
+		let max = event.data.bbmax;
+		let bx = (max[0] - min[0]) / 2;
+		let by = (max[1] - min[1]) / 2;
+		let bz = (max[2] - min[2]) / 2;
+
+		for (let i = 0; i < pos.length; i += 3){
+			pointCounts[(pos[i] >= bx ? 1 : 0) | (pos[i + 1] >= by ? 2 : 0) | (pos[i + 2] >= bz ? 4 : 0)]++;
+		}
+	}
+
 	if (event.data.parentSize){
 		let size = event.data.parentSize;
 
@@ -163,16 +180,10 @@ function readUsingDataView(event) {
 		let i = event.data.parentIndex;
 
 		if (i < 8){
-			let count = 0;
-
 			let index = (i & 2) | ((i & 1) << 2) | ((i & 4) >> 2);
-			let arrays = [];
+			let count = event.data.pointCounts[index];
 
-			for (let ii = 0; ii < pos.length; ii += 3){
-				if (index == ((pos[ii] >= 0.5 ? 1 : 0) | (pos[ii + 1] >= 0.5 ? 2 : 0) | (pos[ii + 2] >= 0.5 ? 4 : 0))){
-					count++;
-				}
-			}
+			let arrays = [];
 
 			for (let o in attributes){
 				if (!constructors[o]) continue;
@@ -203,21 +214,15 @@ function readUsingDataView(event) {
 			let yoff = (index & 2) ? -0.5 : 0;
 			let zoff = (index & 4) ? -0.5 : 0;
 
-			for (let ii = 0; ii < pos.length / 3; ii++){
-				if (index == ((pos[ii * 3] >= 0.5 ? 1 : 0) | (pos[ii * 3 + 1] >= 0.5 ? 2 : 0) | (pos[ii * 3 + 2] >= 0.5 ? 4 : 0))){
-					for (let p of arrays){
-						let off = ii * p.stride;
-
-						if (p.pos){
-							p.array[p.index++] = (p.parray[off + 0] + xoff) * size[0]
-							p.array[p.index++] = (p.parray[off + 1] + yoff) * size[1]
-							p.array[p.index++] = (p.parray[off + 2] + zoff) * size[2]
-						}else{
-							for (let iv = 0; iv < p.stride; iv++){
-								p.array[p.index++] = p.parray[off + iv]
-							}
-						}
+			for (let p of arrays){
+				if (p.pos){
+					for (let ii = 0; ii < p.parray.length; ii += 3){
+						p.array[p.index++] = (p.parray[ii + 0] + xoff) * size[0]
+						p.array[p.index++] = (p.parray[ii + 1] + yoff) * size[1]
+						p.array[p.index++] = (p.parray[ii + 2] + zoff) * size[2]
 					}
+				}else{
+					p.array.set(p.parray, p.index)
 				}
 			}
 		}
@@ -242,6 +247,80 @@ function readUsingDataView(event) {
 		}
 	}
 
+	//count all points and sort them into the 8 quadrents
+	{
+		pointCounts.fill(0);
+		let pos = attributes.position;
+
+		for (let i = 0; i < pos.length; i += 3){
+			pointCounts[(pos[i] >= .5 ? 1 : 0) | (pos[i + 1] >= .5 ? 2 : 0) | (pos[i + 2] >= .5 ? 4 : 0)]++;
+		}
+
+		let arrays = [];
+
+		for (let o in attributes){
+			if (o != 'position'){
+				arrays.push({
+					array: new constructors[o](attributes[o].buffer),
+					stride: strides[o]
+				});
+			}
+		}
+
+		let offsets = [0], ooffsets = [];
+		for (let i = 0; i < pointCounts.length; i++){
+			let val = offsets[i] + pointCounts[i];
+			offsets.push(val);
+			ooffsets.push(val);
+		}
+		offsets.pop();
+
+		//sort the points so that points in the same quadrent appear next to each other in memory
+		let current = 0;
+		while (current < 8){
+			if (offsets[current] >= ooffsets[current]){
+				current++;
+				continue;
+			}
+
+			let i3 = offsets[current] * 3;
+
+			let x = pos[i3 + 0];
+			let y = pos[i3 + 1];
+			let z = pos[i3 + 2];
+			let quad = (x >= .5 ? 1 : 0) | (y >= .5 ? 2 : 0) | (z >= .5 ? 4 : 0);
+
+			if (quad != current){
+				{
+					let dest = offsets[quad] * 3;
+
+					pos[i3 + 0] = pos[dest + 0];
+					pos[i3 + 1] = pos[dest + 1];
+					pos[i3 + 2] = pos[dest + 2];
+					pos[dest + 0] = x;
+					pos[dest + 1] = y;
+					pos[dest + 2] = z;
+				}
+
+				for (let i = 0; i < arrays.length; i++){
+					let {array, stride} = arrays[i];
+					
+					let src = offsets[current] * stride;
+					let dest = offsets[quad] * stride;
+
+					for (let ii = 0; ii < stride; ii++){
+						let temp = array[src + ii];
+						array[src + ii] = array[dest + ii];
+						array[dest + ii] = temp;
+					}
+				}
+
+			}
+
+			offsets[quad]++;
+		}
+	}
+
 	performance.mark("laslaz-end");
 
 	//{ // print timings
@@ -262,6 +341,7 @@ function readUsingDataView(event) {
 	}
 
 	let message = {
+		pointCounts,
 		mean: mean,
 		position: attributes.position.buffer,
 		color: attributes.color.buffer,

@@ -433,18 +433,6 @@ onmessage = function (event) {
 
 	}
 
-
-	{ // add indices
-		let buff = new ArrayBuffer(numPoints * 4);
-		let indices = new Uint32Array(buff);
-
-		for (let i = 0; i < numPoints; i++) {
-			indices[i] = i;
-		}
-		
-		attributeBuffers[PointAttribute.INDICES.name] = { buffer: buff, attribute: PointAttribute.INDICES };
-	}
-
 	performance.mark("binary-decoder-end");
 
 	//{ // print timings
