@@ -214,6 +214,8 @@ export class PointCloudOctreeGeometryNode extends PointCloudTreeNode{
 			}
 			this.oneTimeDisposeHandlers = [];
 		}
+
+		if (this.webglBuffer) this.webglBuffer.dispose();
 	}
 	
 }

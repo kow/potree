@@ -284,6 +284,8 @@ export class PointCloudEptGeometryNode extends PointCloudTreeNode {
 			}
 			this.oneTimeDisposeHandlers = [];
 		}
+
+		if (this.webglBuffer) this.webglBuffer.dispose();
 	}
 }
 

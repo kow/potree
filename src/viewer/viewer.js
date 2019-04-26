@@ -1022,6 +1022,7 @@ export class Viewer extends EventDispatcher{
 
 			gl.createVertexArray = extVAO.createVertexArrayOES.bind(extVAO);
 			gl.bindVertexArray = extVAO.bindVertexArrayOES.bind(extVAO);
+			gl.deleteVertexArray = extVAO.deleteVertexArrayOES.bind(extVAO);
 		}else if(gl instanceof WebGL2RenderingContext){
 			gl.getExtension("EXT_color_buffer_float");
 		}

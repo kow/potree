@@ -534,13 +534,20 @@ class WebGLTexture {
 };
 
 class WebGLBuffer {
-
 	constructor() {
 		this.numElements = 0;
 		this.vao = null;
 		this.vbos = new Map();
 	}
 
+	dispose () {
+		this.disposed = true;
+		this.gl.deleteVertexArray(this.vao);
+
+		for (let o of this.vbos){
+			this.gl.deleteBuffer(o.handle);
+		}
+	}
 };
 
 export class Renderer {
@@ -549,7 +556,6 @@ export class Renderer {
 		this.threeRenderer = threeRenderer;
 		this.gl = this.threeRenderer.context;
 
-		this.buffers = new Map();
 		this.shaders = new Map();
 		this.textures = new Map();
 
@@ -564,6 +570,7 @@ export class Renderer {
 	createBuffer(geometry){
 		let gl = this.gl;
 		let webglBuffer = new WebGLBuffer();
+		webglBuffer.gl = gl;
 		webglBuffer.vao = gl.createVertexArray();
 		webglBuffer.numElements = geometry.attributes.position.count;
 
@@ -599,10 +606,8 @@ export class Renderer {
 		return webglBuffer;
 	}
 
-	updateBuffer(geometry){
+	updateBuffer(geometry, webglBuffer){
 		let gl = this.gl;
-
-		let webglBuffer = this.buffers.get(geometry);
 
 		gl.bindVertexArray(webglBuffer.vao);
 
@@ -690,6 +695,7 @@ export class Renderer {
 		}
 		
 		//render this node
+
 		if (node.geometryNode && childrenMasking != 255){
 			/*const lModel = shader.uniformLocations["modelMatrix"];
 			if (lModel) {
@@ -698,7 +704,8 @@ export class Renderer {
 			}*/
 
 			gl.uniformMatrix4fv(shader.uniformLocations["modelViewMatrix"], false, transform.elements);
-			shader.setUniform1f("uLevel", level);
+			
+			shader.setUniform1f('uLevel', level);
 			shader.setUniform1f("uNodeSpacing", node.geometryNode.spacing);
 			shader.setUniform1f("setChildren", childrenMasking);
 
@@ -769,23 +776,32 @@ export class Renderer {
 
 			shader.setUniform1f("uPCIndex", PCIndex);
 
+
 			let webglBuffer = null;
-			if(!this.buffers.has(geometry)){
-				webglBuffer = this.createBuffer(geometry);
-				this.buffers.set(geometry, webglBuffer);
+			
+			if (!node.geometryNode.webglBuffer || node.geometryNode.webglBuffer.disposed){
+				webglBuffer = node.geometryNode.webglBuffer = this.createBuffer(geometry);
 			}else{
-				webglBuffer = this.buffers.get(geometry);
+				webglBuffer = node.geometryNode.webglBuffer
+				let update = false;
+
 				for(let attributeName in geometry.attributes){
 					let attribute = geometry.attributes[attributeName];
 
 					if(attribute.version > webglBuffer.vbos.get(attributeName).version){
-						this.updateBuffer(geometry);
+						update = true;
+						break;
 					}
+				}
+
+				if (update){
+					this.updateBuffer(geometry, webglBuffer);
 				}
 			}
 
 			gl.bindVertexArray(webglBuffer.vao);
 			gl.drawArrays(gl.POINTS, 0, webglBuffer.numElements);
+			gl.bindVertexArray(null);
 		}
 
 		for (var i = 0; i < 8; i++){
