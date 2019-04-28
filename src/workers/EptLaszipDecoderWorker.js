@@ -1,3 +1,5 @@
+import LASDecoder from '../loader/las/LASDecoder';
+
 let constructors = {
 	'position': Float32Array,
 	'color': Uint8Array,
@@ -18,42 +20,35 @@ let strides = {
 	'pointSourceID': 1
 }
 
-function readUsingDataView(event) {
+const Buffer = (typeof SharedArrayBuffer == 'undefined') ? ArrayBuffer : SharedArrayBuffer;
+
+async function readUsingDataView(event) {
 	performance.mark("laslaz-start");
 
-	let buffer = event.data.buffer;
+	let req = await fetch (event.data.url);
+	let decoder = new LASDecoder(await req.arrayBuffer());
 
-	let numPoints = event.data.numPoints;
-	let pointSize = event.data.pointSize;
-	let pointFormat = event.data.pointFormatID;
-	let scale = event.data.scale;
-	let offset = event.data.offset;
+	let buffer = (await decoder.readPoints()).buffer;
+
+	let numPoints = decoder.header.numPoints;
+	let pointSize = decoder.header.dataStride;
+	let pointFormat = decoder.header.dataFormat;
+	let scale = decoder.header.pointScale;
+	let offset = decoder.header.pointOffset;
+	let mins = decoder.header.bounds.min;
 
 	let sourceUint8 = new Uint8Array(buffer);
 	let sourceView = new DataView(buffer);
 
-	let tightBoundingBox = {
-		min: [
-			Number.POSITIVE_INFINITY,
-			Number.POSITIVE_INFINITY,
-			Number.POSITIVE_INFINITY
-		],
-		max: [
-			Number.NEGATIVE_INFINITY,
-			Number.NEGATIVE_INFINITY,
-			Number.NEGATIVE_INFINITY
-		]
-	};
-
 	let mean = [0, 0, 0];
 
-	let pBuff = new ArrayBuffer(numPoints * 3 * 4);
-	let cBuff = new ArrayBuffer(numPoints * 4);
-	let iBuff = new ArrayBuffer(numPoints * 4);
-	let clBuff = new ArrayBuffer(numPoints);
-	let rnBuff = new ArrayBuffer(numPoints);
-	let nrBuff = new ArrayBuffer(numPoints);
-	let psBuff = new ArrayBuffer(numPoints * 2);
+	let pBuff = new Buffer(numPoints * 3 * 4);
+	let cBuff = new Buffer(numPoints * 4);
+	let iBuff = new Buffer(numPoints * 4);
+	let clBuff = new Buffer(numPoints);
+	let rnBuff = new Buffer(numPoints);
+	let nrBuff = new Buffer(numPoints);
+	let psBuff = new Buffer(numPoints * 2);
 
 	let positions = new Float32Array(pBuff);
 	let colors = new Uint8Array(cBuff);
@@ -87,9 +82,9 @@ function readUsingDataView(event) {
 		let uy = sourceView.getInt32(i * pointSize + 4, true);
 		let uz = sourceView.getInt32(i * pointSize + 8, true);
 
-		x = ux * scale[0] + offset[0] - event.data.mins[0];
-		y = uy * scale[1] + offset[1] - event.data.mins[1];
-		z = uz * scale[2] + offset[2] - event.data.mins[2];
+		x = ux * scale[0] + offset[0];
+		y = uy * scale[1] + offset[1];
+		z = uz * scale[2] + offset[2];
 
 		positions[3 * i + 0] = x;
 		positions[3 * i + 1] = y;
@@ -98,14 +93,6 @@ function readUsingDataView(event) {
 		mean[0] += x / numPoints;
 		mean[1] += y / numPoints;
 		mean[2] += z / numPoints;
-
-		tightBoundingBox.min[0] = Math.min(tightBoundingBox.min[0], x);
-		tightBoundingBox.min[1] = Math.min(tightBoundingBox.min[1], y);
-		tightBoundingBox.min[2] = Math.min(tightBoundingBox.min[2], z);
-
-		tightBoundingBox.max[0] = Math.max(tightBoundingBox.max[0], x);
-		tightBoundingBox.max[1] = Math.max(tightBoundingBox.max[1], y);
-		tightBoundingBox.max[2] = Math.max(tightBoundingBox.max[2], z);
 
 		// INTENSITY
 		let intensity = sourceView.getUint16(i * pointSize + 12, true);
@@ -233,7 +220,7 @@ function readUsingDataView(event) {
 		let min = event.data.bbmin;
 		let max = event.data.bbmax;
 
-		let off = [0, 0, 0]
+		let off = min;
 		let size = [max[0] - min[0], max[1] - min[1], max[2] - min[2]];
 
 		for (let i = 0; i < positions.length; i += 3){
@@ -334,7 +321,7 @@ function readUsingDataView(event) {
 	performance.clearMeasures();
 
 	let len = attributes.position.length / 3;
-	let indices = new ArrayBuffer(len * 4);
+	let indices = new Buffer(len * 4);
 	let iIndices = new Uint32Array(indices);
 	for (let i = 0; i < len; i++) {
 		iIndices[i] = i;
@@ -342,6 +329,7 @@ function readUsingDataView(event) {
 
 	let message = {
 		pointCounts,
+		numPoints,
 		mean: mean,
 		position: attributes.position.buffer,
 		color: attributes.color.buffer,
@@ -350,11 +338,10 @@ function readUsingDataView(event) {
 		returnNumber: attributes.returnNumber.buffer,
 		numberOfReturns: attributes.numberOfReturns.buffer,
 		pointSourceID: attributes.pointSourceID.buffer,
-		tightBoundingBox: tightBoundingBox,
 		indices: indices
 	};
 
-	let transferables = [
+	let transferables = Buffer == ArrayBuffer ? [
 		message.position,
 		message.color,
 		message.intensity,
@@ -363,12 +350,19 @@ function readUsingDataView(event) {
 		message.numberOfReturns,
 		message.pointSourceID,
 		message.indices
-	];
+	] : [];
+
 
 	postMessage(message, transferables);
 };
 
 
 
-onmessage = readUsingDataView;
+onmessage = event => {
+	try {
+		readUsingDataView(event);
+	}catch (e){
+		console.warn("Failed to decode: " + event.data.url + " due to " + e.toString());
+	}
+};
 

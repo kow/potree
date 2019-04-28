@@ -1226,7 +1226,7 @@ export class Viewer extends EventDispatcher{
 		let camera = scene.getActiveCamera();
 		
 		if (this.oldPointBudget){
-			Potree.pointLoadLimit += ((Potree.pointBudget * 2) - Potree.pointLoadLimit) * 0.001;
+			Potree.pointLoadLimit = Math.max(Potree.pointBudget * 2, Potree.pointLoadLimit + ((Potree.pointBudget * 2) - Potree.pointLoadLimit) * 0.001);
 		}else{
 			Potree.pointLoadLimit = Potree.pointBudget * 2;
 		}

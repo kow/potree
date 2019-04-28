@@ -1,4 +1,5 @@
 import {XHRFactory} from "../../XHRFactory.js";
+import LASDecoder from '../las/LASDecoder';
 
 /**
  * laslaz code taken and adapted from plas.io js-laslaz
@@ -37,72 +38,15 @@ export class EptLaszipLoader {
 
 		let url = node.url() + '.laz';
 
-		let req = await fetch (url);
-		let buffer = await req.arrayBuffer();
-
-		await this.parse(node, buffer);
+		await this.parse(node, url);
 	}
 
-	async parse(node, buffer){
-		let lf = new LASFile(buffer);
-
-		let open = await lf.open();
-		lf.isOpen = true;
-
-		let header = await lf.getHeader();
-
-		let i = 0;
-		let np = header.pointsCount;
-
-		let toArray = (v) => [v.x, v.y, v.z];
-		let mins = toArray(node.key.b.min);
-		let maxs = toArray(node.key.b.max);
-
-		while (true) {
-			let data = await lf.readData(1000000, 0, 1);
-
-			let d = new LASDecoder(
-					data.buffer,
-					header.pointsFormatId,
-					header.pointsStructSize,
-					data.count,
-					header.scale,
-					header.offset,
-					mins,
-					maxs);
-			d.extraBytes = header.extraBytes;
-			d.pointsFormatId = header.pointsFormatId;
-			await this.push(node, d);
-
-			i += data.count;
-
-			if (!data.hasMoreData) {
-				header.totalRead = i;
-				header.versionAsString = lf.versionAsString;
-				header.isCompressed = lf.isCompressed;
-				
-				break;
-			}
-		}
-
-		await lf.close();
-		lf.isOpen = false;
-	}
-
-	async push(node, las) {
+	async parse(node, url){
 		let min = node.boundingBox.min;
 		let max = node.boundingBox.max;
 
 		let message = {
-			buffer: las.arrayb,
-			numPoints: las.pointsCount,
-			pointSize: las.pointSize,
-			pointFormatID: las.pointsFormatId,
-			scale: las.scale,
-			offset: las.offset,
-			mins: las.mins,
-			maxs: las.maxs,
-
+			url,
 			bbmin: [min.x, min.y, min.z],
 			bbmax: [max.x, max.y, max.z],
 		};
@@ -133,10 +77,7 @@ export class EptLaszipLoader {
 			}
 		}
 
-		let e = await Potree.workerPool.job(Potree.scriptPath + '/workers/EptLaszipDecoderWorker.js', message, [message.buffer])
-
-		let numPoints = las.pointsCount;
-
+		let e = await Potree.workerPool.job(Potree.scriptPath + '/workers/EptLaszipDecoderWorker.js', message)
 
 		let g = new THREE.BufferGeometry();
 		for (let o in e.data){
@@ -158,7 +99,7 @@ export class EptLaszipLoader {
 		node.doneLoading(
 				g,
 				tightBoundingBox,
-				numPoints,
+				e.data.numPoints,
 				new THREE.Vector3(...e.data.mean));
 	}
 }

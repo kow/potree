@@ -29,20 +29,24 @@ let paths = {
 };
 
 let workers = {
-	"LASLAZWorker": [
+	"LASLAZWorker.js": [
 		"libs/plasio/workers/laz-perf.js",
 		"libs/plasio/workers/laz-loader-worker.js"
 	],
-	"LASDecoderWorker": [
+	"coder.wasm": [
+		"src/workers/coder.wasm"
+	],
+	"LASDecoderWorker.js": [
 		"src/workers/LASDecoderWorker.js"
 	],
-	"EptLaszipDecoderWorker": [
+	"EptLaszipDecoderWorker.js": [
+		"src/loader/las/LASDecoder",
 		"src/workers/EptLaszipDecoderWorker.js"
 	],
-	"EptBinaryDecoderWorker": [
+	"EptBinaryDecoderWorker.js": [
 		"src/workers/EptBinaryDecoderWorker.js"
 	],
-	"GreyhoundBinaryDecoderWorker": [
+	"GreyhoundBinaryDecoderWorker.js": [
 		"libs/plasio/workers/laz-perf.js",
 		"src/workers/GreyhoundBinaryDecoderWorker.js",
 		"src/Version.js",
@@ -75,7 +79,7 @@ gulp.task("workers", function(){
 	for(let workerName of Object.keys(workers)){
 
 		gulp.src(workers[workerName])
-			.pipe(concat(`${workerName}.js`))
+			.pipe(concat(`${workerName}`))
 			.pipe(gulp.dest('build/potree/workers'));
 
 	}
