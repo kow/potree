@@ -446,22 +446,22 @@ bool pointInClipPolygon(vec3 point, int polyIdx) {
 #endif
 
 void doClipping(){
-	#if defined(clip_return_number_enabled)
+	//#if defined(clip_return_number_enabled)
 	{ // return number filter
 		vec2 range = uFilterReturnNumberRange;
 		if(returnNumber < range.x || returnNumber > range.y){
-			gl_Position = vec4(100.0, 100.0, 100.0, 0.0);
+			gl_Position = vec4(0.);
 			
 			return;
 		}
 	}
-	#endif
+	//#endif
 
 	#if defined(clip_number_of_returns_enabled)
 	{ // number of return filter
 		vec2 range = uFilterNumberOfReturnsRange;
 		if(numberOfReturns < range.x || numberOfReturns > range.y){
-			gl_Position = vec4(100.0, 100.0, 100.0, 0.0);
+			gl_Position = vec4(0.);
 			
 			return;
 		}
@@ -474,7 +474,7 @@ void doClipping(){
 		vec2 range = uFilterGPSTimeClipRange;
 
 		if(time < range.x || time > range.y){
-			gl_Position = vec4(100.0, 100.0, 100.0, 0.0);
+			gl_Position = vec4(0.);
 			
 			return;
 		}

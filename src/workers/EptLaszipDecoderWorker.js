@@ -64,8 +64,8 @@ async function readUsingDataView(event) {
 	let co = pointFormat == 2 ? 20 : 28;
 
 	// TODO This should be cached per-resource since this is an expensive check.
-	let twoByteColor = true;
-	/*if (hasColor) {
+	let twoByteColor = false;
+	if (hasColor) {
 		let r, g, b, pos;
 		for (let i = 0; i < numPoints && !twoByteColor; ++i) {
 			pos = i * pointSize;
@@ -74,7 +74,7 @@ async function readUsingDataView(event) {
 			b = sourceView.getUint16(pos + co + 4, true)
 			if (r > 255 || g > 255 || b > 255) twoByteColor = true;
 		}
-	}*/
+	}
 
 	for (let i = 0; i < numPoints; i++) {
 		// POSITION
@@ -358,11 +358,12 @@ async function readUsingDataView(event) {
 
 
 
-onmessage = event => {
+onmessage = async event => {
 	try {
-		readUsingDataView(event);
+		await readUsingDataView(event);
 	}catch (e){
 		console.warn("Failed to decode: " + event.data.url + " due to " + e.toString());
+		postMessage(null);
 	}
 };
 

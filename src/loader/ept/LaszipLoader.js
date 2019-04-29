@@ -1,5 +1,4 @@
 import {XHRFactory} from "../../XHRFactory.js";
-import LASDecoder from '../las/LASDecoder';
 
 /**
  * laslaz code taken and adapted from plas.io js-laslaz
@@ -77,7 +76,9 @@ export class EptLaszipLoader {
 			}
 		}
 
-		let e = await Potree.workerPool.job(Potree.scriptPath + '/workers/EptLaszipDecoderWorker.js', message)
+		let e = await Potree.workerPool.job(Potree.scriptPath + '/workers/EptLaszipDecoderWorker.js', message);
+
+		if (!e.data) return;
 
 		let g = new THREE.BufferGeometry();
 		for (let o in e.data){
