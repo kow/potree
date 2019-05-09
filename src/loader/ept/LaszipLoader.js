@@ -53,10 +53,6 @@ export class EptLaszipLoader {
 		let parent = node.parent;
 
 		if (parent && parent.geometry){
-			let min = parent.boundingBox.min;
-			let max = parent.boundingBox.max;
-			message.parentSize = [max.x - min.x, max.y - min.y, max.z - min.z];
-
 			let i = 0;
 			for (i = 0; i < 8; i++) if (parent.children[i] == node) break;
 			let index = (i & 2) | ((i & 1) << 2) | ((i & 4) >> 2);

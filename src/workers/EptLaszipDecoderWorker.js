@@ -28,7 +28,8 @@ async function readUsingDataView(event) {
 	let req = await fetch (event.data.url);
 	let decoder = new LASDecoder(await req.arrayBuffer());
 
-	let buffer = (await decoder.readPoints()).buffer;
+	let sourceUint8 = await decoder.readPoints();
+	let sourceView = new DataView(sourceUint8.buffer, sourceUint8.byteOffset, sourceUint8.byteLength);
 
 	let numPoints = decoder.header.numPoints;
 	let pointSize = decoder.header.dataStride;
@@ -36,9 +37,6 @@ async function readUsingDataView(event) {
 	let scale = decoder.header.pointScale;
 	let offset = decoder.header.pointOffset;
 	let mins = decoder.header.bounds.min;
-
-	let sourceUint8 = new Uint8Array(buffer);
-	let sourceView = new DataView(buffer);
 
 	let mean = [0, 0, 0];
 
@@ -133,6 +131,8 @@ async function readUsingDataView(event) {
 		}
 	}
 
+	sourceUint8.free();
+
 	let attributes = {
 		position: positions,
 		color: colors,
@@ -145,24 +145,31 @@ async function readUsingDataView(event) {
 
 	let pointCounts = [0, 0, 0, 0, 0, 0, 0, 0]
 
+	//normalize 0 - 1
+	{
+		let min = event.data.bbmin;
+		let max = event.data.bbmax;
+
+		let off = min;
+		let size = [max[0] - min[0], max[1] - min[1], max[2] - min[2]];
+
+		for (let i = 0; i < positions.length; i += 3){
+			positions[i + 0] = (positions[i + 0] - off[0]) / size[0];
+			positions[i + 1] = (positions[i + 1] - off[1]) / size[1];
+			positions[i + 2] = (positions[i + 2] - off[2]) / size[2];
+		}
+	}
+
 	//count all points and sort them into the 8 quadrents
 	{
 		let pos = positions;
 
-		let min = event.data.bbmin;
-		let max = event.data.bbmax;
-		let bx = (max[0] - min[0]) / 2;
-		let by = (max[1] - min[1]) / 2;
-		let bz = (max[2] - min[2]) / 2;
-
 		for (let i = 0; i < pos.length; i += 3){
-			pointCounts[(pos[i] >= bx ? 1 : 0) | (pos[i + 1] >= by ? 2 : 0) | (pos[i + 2] >= bz ? 4 : 0)]++;
+			pointCounts[(pos[i] >= .5 ? 1 : 0) | (pos[i + 1] >= .5 ? 2 : 0) | (pos[i + 2] >= .5 ? 4 : 0)]++;
 		}
 	}
 
-	if (event.data.parentSize){
-		let size = event.data.parentSize;
-
+	if (event.data.parentAttributes){
 		let pos = event.data.parentAttributes.position;
 		let i = event.data.parentIndex;
 
@@ -190,11 +197,7 @@ async function readUsingDataView(event) {
 					pos: o == 'position'
 				};
 
-				if (obj.pos){
-					arrays.splice(0, 0, obj);
-				}else{
-					arrays.push(obj);
-				}
+				arrays.push(obj);
 			}
 
 			let xoff = (index & 1) ? -0.5 : 0;
@@ -204,33 +207,14 @@ async function readUsingDataView(event) {
 			for (let p of arrays){
 				if (p.pos){
 					for (let ii = 0; ii < p.parray.length; ii += 3){
-						p.array[p.index++] = (p.parray[ii + 0] + xoff) * size[0]
-						p.array[p.index++] = (p.parray[ii + 1] + yoff) * size[1]
-						p.array[p.index++] = (p.parray[ii + 2] + zoff) * size[2]
+						p.array[p.index++] = (p.parray[ii + 0] + xoff) * 2
+						p.array[p.index++] = (p.parray[ii + 1] + yoff) * 2
+						p.array[p.index++] = (p.parray[ii + 2] + zoff) * 2
 					}
 				}else{
 					p.array.set(p.parray, p.index)
 				}
 			}
-		}
-	}
-
-	{
-		let positions = attributes.position
-		let min = event.data.bbmin;
-		let max = event.data.bbmax;
-
-		let off = min;
-		let size = [max[0] - min[0], max[1] - min[1], max[2] - min[2]];
-
-		for (let i = 0; i < positions.length; i += 3){
-			let x = positions[i + 0];
-			let y = positions[i + 1];
-			let z = positions[i + 2];
-
-			positions[i + 0] = (x - off[0]) / size[0];
-			positions[i + 1] = (y - off[1]) / size[1];
-			positions[i + 2] = (z - off[2]) / size[2];
 		}
 	}
 

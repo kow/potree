@@ -401,8 +401,6 @@ export function updateVisibility(pointclouds, camera, renderer){
 				
 				let dd = dx * dx + dy * dy + dz * dz;
 				let distance = Math.sqrt(dd);
-				
-				
 				let radius = sphere.radius;
 				
 				let fov = (camera.fov * Math.PI) / 180;
@@ -416,8 +414,14 @@ export function updateVisibility(pointclouds, camera, renderer){
 			
 				weight = screenPixelRadius;
 
+				let levelWeight = pointcloud.levelWeight || 1;
+
+				weight = 1 / (distance - radius) //+ node.level * levelWeight;
+
+
+
 				if(distance - radius < 0){
-					weight = Number.MAX_VALUE;
+					//weight = Number.MAX_VALUE;
 				}
 			} else {
 				// TODO ortho visibility

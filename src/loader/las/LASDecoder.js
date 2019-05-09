@@ -205,6 +205,10 @@ class LASDecoder {
 		}
 	}
 
+	/*
+		to prevent needless memory copy operations, the buffer returned is owned by the web assembly instance and .free must be called on the
+		returned buffer to free the memory from the web assembly instance.
+	*/
 	async readPoints () {
 		let stride = this.header.dataStride;
 		let dataType = formats[this.header.dataFormat];
@@ -220,16 +224,8 @@ class LASDecoder {
 			let laszipHeader = this.records.find(e => e.recordID == 22204 && e.userID == 'laszip encoded');
 			let decoder = await Coder.createDecoder(dataType, this.header.numPoints, laszipHeader.chunkSize);
 
-			let a = new Uint8Array(decoder.decode(this.stream.read(this.stream.remaining)));
-			let b = decoder.destroy();
-
-			let buf = new Uint8Array(a.length + b.length);
-			buf.set(a, 0);
-			buf.set(b, a.length);
-
-			Coder.free(b);
-
-			return buf;
+			decoder.decode(this.stream.read(this.stream.remaining));
+			return decoder.destroy();
 		}else{
 			return this.stream.read(this.header.numPoints * stride)
 		}

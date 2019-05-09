@@ -775,10 +775,7 @@ export class Renderer {
 			}
 
 			shader.setUniform1f("uPCIndex", PCIndex);
-
-
 			let webglBuffer = null;
-			
 			if (!node.geometryNode.webglBuffer || node.geometryNode.webglBuffer.disposed){
 				webglBuffer = node.geometryNode.webglBuffer = this.createBuffer(geometry);
 			}else{
@@ -799,9 +796,11 @@ export class Renderer {
 				}
 			}
 
-			gl.bindVertexArray(webglBuffer.vao);
-			gl.drawArrays(gl.POINTS, 0, webglBuffer.numElements);
-			gl.bindVertexArray(null);
+			if (webglBuffer){
+				gl.bindVertexArray(webglBuffer.vao);
+				gl.drawArrays(gl.POINTS, 0, webglBuffer.numElements);
+				gl.bindVertexArray(null);
+			}
 		}
 
 		for (var i = 0; i < 8; i++){

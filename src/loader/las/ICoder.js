@@ -94,6 +94,10 @@ const buffer = (() => {
 		view.points = points;
 		view.bufferLocation = buf;
 
+		view.free = () => {
+			free(buf);
+		}
+
 		return view;
 	}
 })()
@@ -112,6 +116,7 @@ const genFields = fields => {
 const createDecoder = (() => {
 	const create = cwrap('createDecoder', 'number', ['number', 'number', 'number']);
 	const destroy = cwrap('destroyDecoder', 'number', ['number']);
+	const reset = cwrap('resetDecoder', null, ['number'])
 	const decode = cwrap('decode', 'number', ['number',  'number', 'number'])
 
 	return async (fields, numPoints, chunkSize = 50000) => {
@@ -135,6 +140,10 @@ const createDecoder = (() => {
 
 				free(fields);
 				return result;
+			},
+
+			reset (){
+				reset(decoder);
 			}
 		}
 	}
@@ -143,6 +152,7 @@ const createDecoder = (() => {
 const createEncoder = (() => {
 	const create = cwrap('createEncoder', 'number', ['number', 'number']);
 	const destroy = cwrap('destroyEncoder', 'number', ['number']);
+	const reset = cwrap('resetEncoder', null, ['number'])
 	const encode = cwrap('encode', 'number', ['number',  'number', 'number'])
 
 	return async (fields, chunkSize = 50000) => {
@@ -165,6 +175,10 @@ const createEncoder = (() => {
 				
 				free(fields);
 				return result;
+			},
+
+			reset (){
+				reset(encoder);
 			}
 		}
 	}
