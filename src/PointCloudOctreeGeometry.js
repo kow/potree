@@ -116,18 +116,18 @@ export class PointCloudOctreeGeometryNode extends PointCloudTreeNode{
 		child.parent = this;
 	}
 
-	loadPoints(){
+	async loadPoints(){
 		if (this.pcoGeometry.loader.version.equalOrHigher('1.5') && (this.level % this.pcoGeometry.hierarchyStepSize) === 0 && this.hasChildren) {
-			return this.loadHierachyThenPoints();
-		} else {
-			return this.pcoGeometry.loader.load(this);
+			await this.loadHierachy();
 		}
+
+		return await this.pcoGeometry.loader.load(this);
 	}
 
-	async loadHierachyThenPoints(){
+	async loadHierachy(){
+		let node = this;
 		if ((node.level % node.pcoGeometry.hierarchyStepSize) !== 0) return;
 
-		let node = this;
 		// let hurl = node.pcoGeometry.octreeDir + "/../hierarchy/" + node.name + ".hrc";
 		let hurl = node.pcoGeometry.octreeDir + '/' + node.getHierarchyPath() + '/' + node.name + '.hrc';
 
@@ -193,8 +193,6 @@ export class PointCloudOctreeGeometryNode extends PointCloudTreeNode{
 			parentNode.addChild(currentNode);
 			nodes[name] = currentNode;
 		}
-
-		await node.loadPoints();
 	}
 
 	getNumPoints(){

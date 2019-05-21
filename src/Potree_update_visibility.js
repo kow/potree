@@ -176,7 +176,11 @@ export function updateVisibility(pointclouds, camera, renderer){
 		}
 	}
 
+	let nodesTouched = 0;
+
 	while (priorityQueue.size() > 0) {
+		nodesTouched++;
+
 		let element = priorityQueue.pop();
 		let node = element.node;
 		let parent = element.parent;
@@ -200,15 +204,6 @@ export function updateVisibility(pointclouds, camera, renderer){
 		visible = visible && !(numVisiblePoints + node.getNumPoints() > Potree.pointBudget);
 		visible = visible && !(numVisiblePointsInPointclouds.get(pointcloud) + node.getNumPoints() > pointcloud.pointBudget);
 		visible = visible && level < maxLevel;
-		//visible = visible && node.name !== "r613";
-
-		
-
-
-		if(!window.warned125){
-			console.log("TODO");
-			window.warned125 = true;
-		}
 
 		let clipBoxes = pointcloud.material.clipBoxes;
 		if(true && clipBoxes.length > 0){
@@ -315,9 +310,6 @@ export function updateVisibility(pointclouds, camera, renderer){
 			
 
 		}
-
-		// visible = ["r", "r0", "r06", "r060"].includes(node.name);
-		// visible = ["r"].includes(node.name);
 
 		if (node.spacing) {
 			lowestSpacing = Math.min(lowestSpacing, node.spacing);
@@ -446,6 +438,8 @@ export function updateVisibility(pointclouds, camera, renderer){
 			pointcloud.dem.update(updatingNodes);
 		}
 	}
+
+	Potree.loadingProgress = (nodesTouched - unloadedGeometry.length) / nodesTouched;
 
 	for (let i = 0; i < Math.min(Potree.maxNodesLoading * 2, unloadedGeometry.length); i++) {
 		unloadedGeometry[i].load();
