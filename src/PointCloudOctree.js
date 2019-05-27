@@ -370,21 +370,31 @@ export class PointCloudOctree extends PointCloudTree {
 		let bsWorld = bbWorld.getBoundingSphere(new THREE.Sphere());
 
 		let intersects = false;
+		let points = profile.points;
 
-		for (let i = 0; i < profile.points.length - 1; i++) {
+		for (let i = 0; i < points.length - 1; i++) {
+			let start = points[i];
+			let end = points[i + 1];
 
-			let start = new THREE.Vector3(profile.points[i + 0].x, profile.points[i + 0].y, bsWorld.center.z);
-			let end = new THREE.Vector3(profile.points[i + 1].x, profile.points[i + 1].y, bsWorld.center.z);
+			let center = new THREE.Vector3().addVectors(end, start).multiplyScalar(0.5);
+			let up = profile.up || new THREE.Vector3(0, 0, 1);
 
-			let closest = new THREE.Line3(start, end).closestPointToPoint(bsWorld.center, true, new THREE.Vector3());
-			let distance = closest.distanceTo(bsWorld.center);
+			let length = start.distanceTo(end);
+			let side = new THREE.Vector3().subVectors(end, start).normalize();
+			let forward = new THREE.Vector3().crossVectors(side, up).normalize();
+			let cutPlane = new THREE.Plane().setFromNormalAndCoplanarPoint(forward, start);
+			let halfPlane = new THREE.Plane().setFromNormalAndCoplanarPoint(side, center);
 
-			intersects = intersects || (distance < (bsWorld.radius + profile.width));
+			let distance = 
+				Math.max(
+					Math.abs(cutPlane.distanceToPoint(bsWorld.center)) - bsWorld.radius - profile.width,
+					Math.abs(halfPlane.distanceToPoint(bsWorld.center)) - bsWorld.radius - length
+				)
+
+			if (distance < 0) return true;
 		}
 
-		//console.log(`${node.name}: ${intersects}`);
-
-		return intersects;
+		return false;
 	}
 
 	nodesOnRay (nodes, ray, camera) {
