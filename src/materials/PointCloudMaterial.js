@@ -121,6 +121,8 @@ export class PointCloudMaterial extends THREE.RawShaderMaterial {
 			uFilterReturnNumberRange:		{ type: "fv", value: [0, 7]},
 			uFilterNumberOfReturnsRange:	{ type: "fv", value: [0, 7]},
 			uFilterGPSTimeClipRange:		{ type: "fv", value: [0, 7]},
+
+			classificationFilters: {type: 'fv', value: []},
 		};
 
 		this.colorMixer = {
@@ -234,6 +236,10 @@ export class PointCloudMaterial extends THREE.RawShaderMaterial {
 			defines.push('#define attenuated_point_size');
 		} else if (this.pointSizeType === PointSizeType.ADAPTIVE) {
 			defines.push('#define adaptive_point_size');
+		}
+
+		if (this.uniforms.classificationFilters.value.length){
+			defines.push('#define clip_classification ' + this.uniforms.classificationFilters.value.length);
 		}
 
 		if (this.shape === PointShape.SQUARE) {
@@ -573,6 +579,36 @@ export class PointCloudMaterial extends THREE.RawShaderMaterial {
 					target: this
 				});
 			}
+		}
+	}
+
+	set visibleClassifications (v) {
+		let l = this.uniforms.classificationFilters.value;
+
+		if (l.length == v.length){
+			let found = false;
+
+			for (let i = 0; i < l.length; i++){
+				if (v[i] != l[i]){
+					found = true;
+					break;
+				}
+			}
+
+			if (!found){
+				return; 
+			}
+		}
+
+		this.uniforms.classificationFilters.value = new Float32Array(v);
+
+		if (l.length != v.length){
+			this.updateShaderSource();
+		}else{
+			this.dispatchEvent({
+				type: 'material_property_changed',
+				target: this
+			});
 		}
 	}
 

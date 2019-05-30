@@ -17,8 +17,7 @@ export class ProfileData {
 			let length = start.distanceTo(end);
 			let side = new THREE.Vector3().subVectors(end, start).normalize();
 			let forward = new THREE.Vector3().crossVectors(side, up).normalize();
-			let N = forward;
-			let cutPlane = new THREE.Plane().setFromNormalAndCoplanarPoint(N, start);
+			let cutPlane = new THREE.Plane().setFromNormalAndCoplanarPoint(forward, start);
 			let halfPlane = new THREE.Plane().setFromNormalAndCoplanarPoint(side, center);
 
 			let segment = {

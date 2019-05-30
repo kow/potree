@@ -63,6 +63,10 @@ uniform int clipMethod;
 	uniform mat4 uClipPolygonWVP[num_clippolygons];
 #endif
 
+#if defined (clip_classification)
+	uniform float classificationFilters[clip_classification];
+#endif
+
 
 uniform float size;
 uniform float minSize;
@@ -445,8 +449,20 @@ bool pointInClipPolygon(vec3 point, int polyIdx) {
 }
 #endif
 
+void clipClassification (){
+	#if defined(clip_classification)
+	for (int i = 0; i < clip_classification; i++){
+		if (classificationFilters[i] == classification){
+			return;
+		}
+	}
+
+	gl_Position = vec4(0.);
+	#endif
+}
+
 void doClipping(){
-	//#if defined(clip_return_number_enabled)
+	#if defined(clip_return_number_enabled)
 	{ // return number filter
 		vec2 range = uFilterReturnNumberRange;
 		if(returnNumber < range.x || returnNumber > range.y){
@@ -455,7 +471,9 @@ void doClipping(){
 			return;
 		}
 	}
-	//#endif
+	#endif
+
+	clipClassification();
 
 	#if defined(clip_number_of_returns_enabled)
 	{ // number of return filter

@@ -1119,7 +1119,7 @@ export class Renderer {
 			// uniform float uPCIndex
 			shader.setUniform1f("uOctreeSpacing", material.spacing);
 			shader.setUniform("uOctreeSize", material.uniforms.octreeSize.value);
-
+			gl.uniform1fv(shader.uniformLocations["classificationFilters[0]"], material.uniforms.classificationFilters.value);
 
 			//uniform vec3 uColor;
 			shader.setUniform3f("uColor", material.color.toArray());
