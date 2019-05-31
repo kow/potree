@@ -685,7 +685,7 @@ export class Renderer {
 				let child = node.children[ii];
 				let index = (ii & 2) | ((ii & 1) << 2) | ((ii & 4) >> 2);
 
-				if (child && child.sceneNode && child.sceneNode.visible){
+				if (child && child.geometryNode && child.geometryNode.visible){
 					childrenMasking |= 1 << index;
 					children[index] = node.children[ii];
 				}else if (node.geometryNode && node.geometryNode.pointCounts && node.geometryNode.pointCounts[index] == 0){
@@ -695,8 +695,7 @@ export class Renderer {
 		}
 		
 		//render this node
-
-		if (node.geometryNode && node.geometryNode.geometry && childrenMasking != 255){
+		if (node.geometryNode && node.geometryNode.geometry && childrenMasking != 255 && node.geometryNode.level >= (octree.minRenderLevel || 0)){
 			/*const lModel = shader.uniformLocations["modelMatrix"];
 			if (lModel) {
 				mat4holder.set(world.elements);

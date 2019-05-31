@@ -3,7 +3,6 @@ import {ClipTask, ClipMethod} from "./defines";
 import {Box3Helper} from "./utils/Box3Helper";
 
 export function updatePointClouds(pointclouds, camera, renderer){
-
 	for (let pointcloud of pointclouds) {
 		let start = performance.now();
 
@@ -22,8 +21,7 @@ export function updatePointClouds(pointclouds, camera, renderer){
 	let result = updateVisibility(pointclouds, camera, renderer);
 
 	for (let pointcloud of pointclouds) {
-		pointcloud.updateMaterial(pointcloud.material, pointcloud.visibleNodes, camera, renderer);
-		pointcloud.updateVisibleBounds();
+		pointcloud.updateMaterial(pointcloud.material, camera, renderer);
 	}
 
 	exports.lru.freeMemory();
@@ -37,7 +35,7 @@ export function updateVisibilityStructures(pointclouds, camera, renderer) {
 	let frustums = [];
 	let camObjPositions = [];
 	let priorityQueue = new BinaryHeap(function (x) { return 1 / x.weight; });
-
+	
 	for (let i = 0; i < pointclouds.length; i++) {
 		let pointcloud = pointclouds[i];
 
@@ -45,11 +43,8 @@ export function updateVisibilityStructures(pointclouds, camera, renderer) {
 			continue;
 		}
 
-		pointcloud.numVisibleNodes = 0;
 		pointcloud.numVisiblePoints = 0;
 		pointcloud.deepestVisibleLevel = 0;
-		pointcloud.visibleNodes = [];
-		pointcloud.visibleGeometry = [];
 
 		// frustum in object space
 		//camera.updateMatrixWorld();
@@ -73,7 +68,7 @@ export function updateVisibilityStructures(pointclouds, camera, renderer) {
 		let camMatrixObject = new THREE.Matrix4().multiply(worldI).multiply(view);
 		let camObjPos = new THREE.Vector3().setFromMatrixPosition(camMatrixObject);
 		camObjPositions.push(camObjPos);
-
+		
 		if (pointcloud.visible && pointcloud.root !== null) {
 			priorityQueue.push({pointcloud: i, node: pointcloud.root, weight: Number.MAX_VALUE});
 		}
@@ -100,36 +95,8 @@ export function updateVisibilityStructures(pointclouds, camera, renderer) {
 
 
 export function updateVisibility(pointclouds, camera, renderer){
-	/*let visibleNodes = [];
-	let points = 0;
-
-
-	for (let pointcloud of pointclouds){
-		pointcloud.visibleNodes = [];
-
-		if (!pointcloud.root.isLoaded()){
-			pointcloud.root.load()
-		}
-		
-		pointcloud.visibleNodes.push(pointcloud.root)
-
-		points += pointcloud.root.getNumPoints();
-		visibleNodes.push(pointcloud.root)
-	}
-
-	return {
-		visibleNodes: visibleNodes,
-		numVisiblePoints: points,
-		lowestSpacing: 10
-	};*/
-
-	let numVisibleNodes = 0;
 	let numVisiblePoints = 0;
 
-	let numVisiblePointsInPointclouds = new Map(pointclouds.map(pc => [pc, 0]));
-
-	let visibleNodes = [];
-	let visibleGeometry = [];
 	let unloadedGeometry = [];
 
 	let lowestSpacing = Infinity;
@@ -201,8 +168,6 @@ export function updateVisibility(pointclouds, camera, renderer){
 		let maxLevel = pointcloud.maxLevel || Infinity;
 		let level = node.getLevel();
 		let visible = insideFrustum;
-		visible = visible && !(numVisiblePoints + node.getNumPoints() > Potree.pointBudget);
-		visible = visible && !(numVisiblePointsInPointclouds.get(pointcloud) + node.getNumPoints() > pointcloud.pointBudget);
 		visible = visible && level < maxLevel;
 
 		let clipBoxes = pointcloud.material.clipBoxes;
@@ -317,40 +282,43 @@ export function updateVisibility(pointclouds, camera, renderer){
 			lowestSpacing = Math.min(lowestSpacing, node.geometryNode.spacing);
 		}
 
-		if (numVisiblePoints + node.getNumPoints() > Potree.pointBudget) {
-			break;
+		if (visible){
+			let npoints = 0;
+
+			if (level > pointcloud.minRenderLevel){
+				npoints = node.getNumPoints();
+			}else if (level == pointcloud.minRenderLevel){
+				let n = node;
+
+				while (n != null){
+					npoints += n.getNumPoints();
+					n = n.parent;
+				}
+			}
+
+			if (numVisiblePoints + npoints > Potree.pointBudget) {
+				visible = false;
+			}else{
+				numVisiblePoints += npoints;
+			}
 		}
 
+		(node.geometryNode || node).visible = visible;
 		if (!visible) {
 			continue;
 		}
 
-		// TODO: not used, same as the declaration?
-		// numVisibleNodes++;
-		numVisiblePoints += node.getNumPoints();
-		let numVisiblePointsInPointcloud = numVisiblePointsInPointclouds.get(pointcloud);
-		numVisiblePointsInPointclouds.set(pointcloud, numVisiblePointsInPointcloud + node.getNumPoints());
-
-		pointcloud.numVisibleNodes++;
-		pointcloud.numVisiblePoints += node.getNumPoints();
-
 		if (node.isGeometryNode() && (!parent || parent.isTreeNode())) {
-			if (node.isLoaded() && loadedToGPUThisFrame < 4) {
+			if (node.isLoaded()) {
 				node = pointcloud.toTreeNode(node, parent);
-				loadedToGPUThisFrame++;
 			} else {
-				unloadedGeometry.push(node);
-				visibleGeometry.push(node);
+				if (level >= pointcloud.minRenderLevel) unloadedGeometry.push(node);
 			}
 		}
 
 		if (node.isTreeNode()) {
 			exports.lru.touch(node.geometryNode);
-			node.sceneNode.visible = true;
 			node.sceneNode.material = pointcloud.material;
-
-			visibleNodes.push(node);
-			pointcloud.visibleNodes.push(node);
 
 			if(node._transformVersion === undefined){
 				node._transformVersion = -1;
@@ -406,14 +374,14 @@ export function updateVisibility(pointclouds, camera, renderer){
 			
 				weight = screenPixelRadius;
 
-				let levelWeight = pointcloud.levelWeight || 1;
+				//let levelWeight = pointcloud.levelWeight || 1000;
 
-				weight = 1 / (distance - radius) //+ node.level * levelWeight;
+				//weight = -(distance - radius) + node.level * levelWeight;
 
 
 
 				if(distance - radius < 0){
-					//weight = Number.MAX_VALUE;
+					weight = Number.MAX_VALUE;
 				}
 			} else {
 				// TODO ortho visibility
@@ -429,7 +397,7 @@ export function updateVisibility(pointclouds, camera, renderer){
 		}
 	}// end priority queue loop
 
-	{ // update DEM
+	/*{ // update DEM
 		let maxDEMLevel = 4;
 		let candidates = pointclouds
 			.filter(p => (p.generateDEM && p.dem instanceof Potree.DEM));
@@ -437,16 +405,16 @@ export function updateVisibility(pointclouds, camera, renderer){
 			let updatingNodes = pointcloud.visibleNodes.filter(n => n.getLevel() <= maxDEMLevel);
 			pointcloud.dem.update(updatingNodes);
 		}
-	}
-
+	}*/
+	//console.log(numVisiblePoints)
+	Potree.visiblePoints = numVisiblePoints;
 	Potree.loadingProgress = (nodesTouched - unloadedGeometry.length) / nodesTouched;
 
-	for (let i = 0; i < Math.min(Potree.maxNodesLoading * 2, unloadedGeometry.length); i++) {
+	for (let i = 0; i < unloadedGeometry.length && Potree.nodesLoading.length + i < Potree.maxNodesLoading; i++) {
 		unloadedGeometry[i].load();
 	}
 
 	return {
-		visibleNodes: visibleNodes,
 		numVisiblePoints: numVisiblePoints,
 		lowestSpacing: lowestSpacing
 	};

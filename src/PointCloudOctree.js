@@ -232,37 +232,7 @@ export class PointCloudOctree extends PointCloudTree {
 		return node;
 	}
 
-	updateVisibleBounds () {
-		let leafNodes = [];
-		for (let i = 0; i < this.visibleNodes.length; i++) {
-			let node = this.visibleNodes[i];
-			let isLeaf = true;
-
-			for (let j = 0; j < node.children.length; j++) {
-				let child = node.children[j];
-				if (child instanceof PointCloudOctreeNode) {
-					isLeaf = isLeaf && !child.sceneNode.visible;
-				} else if (child instanceof PointCloudOctreeGeometryNode) {
-					isLeaf = true;
-				}
-			}
-
-			if (isLeaf) {
-				leafNodes.push(node);
-			}
-		}
-
-		this.visibleBounds.min = new THREE.Vector3(Infinity, Infinity, Infinity);
-		this.visibleBounds.max = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
-		for (let i = 0; i < leafNodes.length; i++) {
-			let node = leafNodes[i];
-
-			this.visibleBounds.expandByPoint(node.getBoundingBox().min);
-			this.visibleBounds.expandByPoint(node.getBoundingBox().max);
-		}
-	}
-
-	updateMaterial (material, visibleNodes, camera, renderer) {
+	updateMaterial (material, camera, renderer) {
 		material.fov = camera.fov * (Math.PI / 180);
 		material.screenWidth = renderer.domElement.clientWidth;
 		material.screenHeight = renderer.domElement.clientHeight;
@@ -398,32 +368,22 @@ export class PointCloudOctree extends PointCloudTree {
 	}
 
 	nodesOnRay (nodes, ray, camera) {
-		let nodesOnRay = [];
+		let sphere = new THREE.Sphere();
 
-		for (let i = 0; i < nodes.length; i++) {
-			let pointcloud = nodes[i].pointcloud;
-			let _ray = ray.clone();
-			//reproject ray to local projection system
-			if (camera && camera.controls){
-				let pointTo = camera.controls.project(pointcloud.projection, _ray.direction.multiplyScalar(100).add(_ray.origin));
-				let origin = camera.controls.project(pointcloud.projection, _ray.origin);
-				pointTo.subtract(origin).normalize();
+		let walk = node => {
+			if (!node || !node.geometry) return;
+			node.geometry.boundingBox.getBoundingSphere(sphere).applyMatrix4(this.matrixWorld);
 
-				_ray.origin = new THREE.Vector3(origin.x, origin.y, origin.z);
-				_ray.direction = new THREE.Vector3(pointTo.x, pointTo.y, pointTo.z);
+			if (ray.intersectsSphere(sphere)) {
+				nodes.push(node);
 			}
 
-			let node = nodes[i];
-			// let inverseWorld = new THREE.Matrix4().getInverse(node.matrixWorld);
-			// let sphere = node.getBoundingSphere().clone().applyMatrix4(node.sceneNode.matrixWorld);
-			let sphere = node.getBoundingSphere().clone().applyMatrix4(this.matrixWorld);
-
-			if (_ray.intersectsSphere(sphere)) {
-				nodesOnRay.push(node);
-			}
+			for (let i = 0; i < 8; i++) walk(node.children[i]);
 		}
-		
-		return nodesOnRay;
+
+		for (let i = 0; i < this.children.length; i++){
+			walk(this.children[i]);
+		}
 	}
 
 	updateMatrixWorld (force) {
@@ -643,7 +603,18 @@ export class PointCloudOctree extends PointCloudTree {
 		let pointSizeType = getVal(params.pointSizeType, this.material.pointSizeType);
 		let pointSize = getVal(params.pointSize, this.material.size);
 
-		let nodes = this.nodesOnRay(this.visibleNodes, ray, camera);
+		let nodes = [];
+		//reproject ray to local projection system
+		if (camera && camera.controls){
+			let pointTo = camera.controls.project(this.projection, ray.direction.multiplyScalar(100).add(ray.origin));
+			let origin = camera.controls.project(this.projection, ray.origin);
+			pointTo.subtract(origin).normalize();
+
+			ray.origin = new THREE.Vector3(origin.x, origin.y, origin.z);
+			ray.direction = new THREE.Vector3(pointTo.x, pointTo.y, pointTo.z);
+		}
+
+		this.nodesOnRay(nodes, ray, camera);
 
 		if (nodes.length === 0) {
 			return null;
@@ -697,7 +668,7 @@ export class PointCloudOctree extends PointCloudTree {
 				pickMaterial.clipBoxes = [];
 			}
 
-			this.updateMaterial(pickMaterial, nodes, camera, renderer);
+			this.updateMaterial(pickMaterial, camera, renderer);
 		}
 
 		//pickMaterial.pointColorType = Potree.PointColorType.LOD;
@@ -819,13 +790,13 @@ export class PointCloudOctree extends PointCloudTree {
 			}
 
 			let node = nodes[hit.pcIndex];
-			let pc = node.sceneNode;
-			let geometry = node.geometryNode.geometry;
+			let geometry = node.geometry;
 
 			for(let attributeName in geometry.attributes){
 				let attribute = geometry.attributes[attributeName];
 
-				let bb = node.geometryNode.boundingBox;
+				let bb = geometry.boundingBox;
+
 				let size = [bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z];
 
 				if (attributeName === 'position') {
@@ -834,11 +805,11 @@ export class PointCloudOctree extends PointCloudTree {
 					let z = attribute.array[3 * hit.pIndex + 2] * size[2];
 
 					let position = new THREE.Vector3(x, y, z);
-					position.applyMatrix4(pc.matrixWorld);
+					position.applyMatrix4(node.matrixWorld);
 
 					//project back to global coordinates
 					if (camera.controls) {
-						let pos = camera.controls.unproject(node.pointcloud.projection, position);
+						let pos = camera.controls.unproject(this.projection, position);
 
 						position.x = pos.x;
 						position.y = pos.y;
@@ -851,7 +822,7 @@ export class PointCloudOctree extends PointCloudTree {
 				} else if (attributeName === 'gpsTime') {
 					let values = attribute.array.slice(attribute.itemSize * hit.pIndex, attribute.itemSize * (hit.pIndex + 1)) ;
 
-					values[0] += node.geometryNode.gpsTime.offset;
+					values[0] += node.gpsTime.offset;
 
 					point[attributeName] = values;
 				} else {
@@ -1029,13 +1000,10 @@ export class PointCloudOctree extends PointCloudTree {
 	}
 
 	set visible(value){
-
-		if(value !== this._visible){
-			this._visible = value;
-
+		if (value !== this._visible){
 			this.dispatchEvent({type: 'visibility_changed', pointcloud: this});
 		}
-
+		this._visible = value;
 	}
 
 }
