@@ -346,7 +346,7 @@ onmessage = async event => {
 	try {
 		await readUsingDataView(event);
 	}catch (e){
-		console.warn("Failed to decode: " + event.data.url + " due to " + e.toString());
+		console.warn("Failed to decode: " + event.data.url + " due to " + e.toString() + e.stack);
 		postMessage(null);
 	}
 };

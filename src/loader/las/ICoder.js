@@ -105,10 +105,13 @@ const buffer = (() => {
 const genFields = fields => {
 	let m = malloc(fields.length * 4 + 4);
 	let buf = new Uint32Array(m.buffer, m.byteOffset, m.byteLength);
+	let i = 0;
 
-	for (let i = 0; i < fields.length; i++){
+	for (; i < fields.length; i++){
 		buf[i] = fields[i];
 	}
+
+	buf[i] = 0;
 
 	return m;
 }
