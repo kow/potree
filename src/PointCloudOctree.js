@@ -376,9 +376,9 @@ export class PointCloudOctree extends PointCloudTree {
 
 			if (ray.intersectsSphere(sphere)) {
 				nodes.push(node);
-			}
 
-			for (let i = 0; i < 8; i++) walk(node.children[i]);
+				for (let i = 0; i < 8; i++) walk(node.children[i]);	
+			}
 		}
 
 		for (let i = 0; i < this.children.length; i++){

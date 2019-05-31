@@ -679,8 +679,8 @@ export class Renderer {
 		var childrenMasking = 0;
 		var children = [null, null, null, null, null, null, null, null];
 		let level = node.getLevel();
-
-		if (!params.nodeList || (PCIndex = params.nodeList.indexOf(node)) >= 0){
+		
+		if (!params.nodeList || (PCIndex = params.nodeList.indexOf(node.sceneNode)) >= 0){
 			for (var ii = 0; ii < 8; ii++){
 				let child = node.children[ii];
 				let index = (ii & 2) | ((ii & 1) << 2) | ((ii & 4) >> 2);
