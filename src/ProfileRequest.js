@@ -67,17 +67,15 @@ export class ProfileRequest {
 
 		if (node.level <= this.maxDepth){
 			// add points to result
-			if (node.level == this.maxDepth || (this.maxDepth > node.level && !node.hasChildren)){
-				this.getPointsInsideProfile(node, this.temporaryResult);
-				
-				if (this.temporaryResult.size() > 100) {
-					this.pointsServed += this.temporaryResult.size();
-					this.callback.onProgress({request: this, points: this.temporaryResult});
-					this.temporaryResult = new ProfileData(this.profile, this.pointcloud);
-				}
-
-				this.highestLevelServed = Math.max(node.getLevel(), this.highestLevelServed);
+			this.getPointsInsideProfile(node, this.temporaryResult);
+			
+			if (this.temporaryResult.size() > 100) {
+				this.pointsServed += this.temporaryResult.size();
+				this.callback.onProgress({request: this, points: this.temporaryResult});
+				this.temporaryResult = new ProfileData(this.profile, this.pointcloud);
 			}
+
+			this.highestLevelServed = Math.max(node.getLevel(), this.highestLevelServed);
 
 			exports.lru.touch(node);
 
@@ -121,35 +119,48 @@ export class ProfileRequest {
 		let pos = new THREE.Vector3();
 		let svp = new THREE.Vector3();
 
-		let view = new Float32Array(node.geometry.attributes.position.array);
-		view = view.subarray(0, numPoints * 3)
+		for (let i = 0; i < 8; i++){
+			let child = node.children[i];
 
-		let bb = node.geometry.boundingBox;
-		let size = [bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z];
+			if (node.level == this.maxDepth){
+				child = null;
+			}
 
-		for (let i = 0; i < numPoints; i++) {
-			pos.set(
-				view[i * 3 + 0] * size[0],
-				view[i * 3 + 1] * size[1],
-				view[i * 3 + 2] * size[2]);
-		
-			pos.applyMatrix4(matrix);
-			let distance = Math.abs(segment.cutPlane.distanceToPoint(pos));
-			let centerDistance = Math.abs(segment.halfPlane.distanceToPoint(pos));
+			if (child == null){
+				let index = (i & 2) | ((i & 1) << 2) | ((i & 4) >> 2);
+				let start = 0;
+				for (let ii = 0; ii < index; ii++) start += node.pointCounts[ii];
 
-			if (distance < this.profile.width / 2 && centerDistance < segment.length / 2) {
-				svp.subVectors(pos, segment.start);
-				let localMileage = segmentDir.dot(svp);
+				let view = node.geometry.attributes.position.array.subarray(start * 3, (start + node.pointCounts[i]) * 3);
 
-				accepted[numAccepted] = i;
-				mileage[numAccepted] = localMileage + totalMileage;
-				points.boundingBox.expandByPoint(pos);
+				let bb = node.geometry.boundingBox;
+				let size = [bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z];
 
-				acceptedPositions[3 * numAccepted + 0] = pos.x;
-				acceptedPositions[3 * numAccepted + 1] = pos.y;
-				acceptedPositions[3 * numAccepted + 2] = pos.z;
+				for (let i = 0; i < view.length; i += 3) {
+					pos.set(
+						view[i + 0] * size[0],
+						view[i + 1] * size[1],
+						view[i + 2] * size[2]);
+				
+					pos.applyMatrix4(matrix);
+					let distance = Math.abs(segment.cutPlane.distanceToPoint(pos));
+					let centerDistance = Math.abs(segment.halfPlane.distanceToPoint(pos));
 
-				numAccepted++;
+					if (distance < this.profile.width / 2 && centerDistance < segment.length / 2) {
+						svp.subVectors(pos, segment.start);
+						let localMileage = segmentDir.dot(svp);
+
+						accepted[numAccepted] = start + (i / 3);
+						mileage[numAccepted] = localMileage + totalMileage;
+						points.boundingBox.expandByPoint(pos);
+
+						acceptedPositions[3 * numAccepted + 0] = pos.x;
+						acceptedPositions[3 * numAccepted + 1] = pos.y;
+						acceptedPositions[3 * numAccepted + 2] = pos.z;
+
+						numAccepted++;
+					}
+				}
 			}
 		}
 
@@ -204,7 +215,7 @@ export class ProfileRequest {
 			//	viewer.scene.scene.add(boxHelper);
 			//}
 
-			let sv = new THREE.Vector3().subVectors(segment.end, segment.start).setZ(0);
+			let sv = new THREE.Vector3().subVectors(segment.end, segment.start);
 			let segmentDir = sv.clone().normalize();
 
 			let points = new Points();

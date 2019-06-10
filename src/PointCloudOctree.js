@@ -55,45 +55,6 @@ export class PointCloudOctreeNode extends PointCloudTreeNode {
 		return children;
 	}
 
-	getPointsInBox(boxNode){
-
-		if(!this.sceneNode){
-			return null;
-		}
-
-		let buffer = this.geometryNode.buffer;
-
-		let posOffset = buffer.offset("position");
-		let stride = buffer.stride;
-		let view = new DataView(buffer.data);
-
-		let worldToBox = new THREE.Matrix4().getInverse(boxNode.matrixWorld);
-		let objectToBox = new THREE.Matrix4().multiplyMatrices(worldToBox, this.sceneNode.matrixWorld);
-
-		let inBox = [];
-
-		let pos = new THREE.Vector4();
-		for(let i = 0; i < buffer.numElements; i++){
-			let x = view.getFloat32(i * stride + posOffset + 0, true);
-			let y = view.getFloat32(i * stride + posOffset + 4, true);
-			let z = view.getFloat32(i * stride + posOffset + 8, true);
-
-			pos.set(x, y, z, 1);
-			pos.applyMatrix4(objectToBox);
-
-			if(-0.5 < pos.x && pos.x < 0.5){
-				if(-0.5 < pos.y && pos.y < 0.5){
-					if(-0.5 < pos.z && pos.z < 0.5){
-						pos.set(x, y, z, 1).applyMatrix4(this.sceneNode.matrixWorld);
-						inBox.push(new THREE.Vector3(pos.x, pos.y, pos.z));
-					}
-				}
-			}
-		}
-
-		return inBox;
-	}
-
 	get name () {
 		return this.geometryNode.name;
 	}
@@ -550,6 +511,101 @@ export class PointCloudOctree extends PointCloudTree {
 		points.projectedBoundingBox.max.x = mileage.x;
 		points.projectedBoundingBox.max.y = points.boundingBox.max.y;
 
+		return points;
+	}
+
+	async getPointsInBox(mat, projector){
+		let points = []
+
+		let worldToBox;
+
+		let p1size, p2size, p3size;
+		let plane1, plane2, plane3;
+
+		{
+			let p = projector.projectTo(this.projection);
+
+			try {
+				let origin = p(Math.vec3(0).multiply(mat));
+				let x = p(Math.vec3(1, 0, 0).multiply(mat)).subtract(origin);
+				let y = p(Math.vec3(0, 1, 0).multiply(mat)).subtract(origin);
+				let z = p(Math.vec3(0, 0, 1).multiply(mat)).subtract(origin);
+				
+				mat = Math.mat4(x, 0, y, 0, z, 0, origin, 1);
+
+				p1size = x.len();
+				p2size = y.len();
+				p3size = z.len();
+
+				plane1 = new THREE.Plane().setFromNormalAndCoplanarPoint(x.normalize().threeAlias(), origin.threeAlias())
+				plane2 = new THREE.Plane().setFromNormalAndCoplanarPoint(y.normalize().threeAlias(), origin.threeAlias())
+				plane3 = new THREE.Plane().setFromNormalAndCoplanarPoint(z.normalize().threeAlias(), origin.threeAlias())
+			}catch (e){}
+
+			worldToBox = new THREE.Matrix4().set(...mat.invert().transpose());
+		}
+
+		let projectBack = projector.projectFrom(this.projection);
+		let root = this.pcoGeometry.root.geometry.attributes;
+		
+		let checkPoints = (position, bb, size) => {
+			let pos = new THREE.Vector4();
+			for (let i = 0; i < position.length; i += 3){
+				let x = position[i + 0] * size[0] + bb.min.x;
+				let y = position[i + 1] * size[1] + bb.min.y;
+				let z = position[i + 2] * size[2] + bb.min.z;
+
+				pos.set(x, y, z, 1);
+				pos.applyMatrix4(worldToBox);
+				
+				if(-0.5 < pos.x && pos.x < 0.5){
+					if(-0.5 < pos.y && pos.y < 0.5){
+						if(-0.5 < pos.z && pos.z < 0.5){
+							let p = projectBack(Math.vec3(x, y, z));
+
+							points.push(...p);
+						}
+					}
+				}
+			}
+		}
+
+		let process = async root => {
+			await root.load();
+			
+			let bb = root.boundingBox;
+			let size = [bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z];
+
+			for (let i = 0; i < 8; i++){
+				let child = root.children[i];
+
+				if (child){
+					let bsWorld = child.boundingSphere;
+
+					let distance = Math.max(
+						Math.abs(plane1.distanceToPoint(bsWorld.center)) - bsWorld.radius - p1size,
+						Math.abs(plane2.distanceToPoint(bsWorld.center)) - bsWorld.radius - p2size,
+						Math.abs(plane3.distanceToPoint(bsWorld.center)) - bsWorld.radius - p3size
+					)
+					
+					if (distance >= 0) child = null;
+				}
+
+				if (child){
+					await process(child);
+				}else{
+					let index = (i & 2) | ((i & 1) << 2) | ((i & 4) >> 2);
+					let start = 0;
+					for (let ii = 0; ii < index; ii++) start += root.pointCounts[ii];
+
+					start *= 3;
+					
+					checkPoints(root.geometry.attributes.position.array.subarray(start, start + root.pointCounts[index] * 3), bb, size);
+				}
+			}
+		}
+
+		await process (this.pcoGeometry.root);
 		return points;
 	}
 

@@ -1342,12 +1342,9 @@ export class Viewer extends EventDispatcher{
 
 				let visibleBoxes = [];
 				for(let pointcloud of this.scene.pointclouds){
-					for(let node of pointcloud.visibleNodes.filter(vn => vn.boundingBoxNode !== undefined)){
-						let box = node.boundingBoxNode;
-						visibleBoxes.push(box);
-					}
+					visibleBoxes = visibleBoxes.concat(pointcloud.boundingBoxNodes);
 				}
-
+				
 				bbRoot.children = visibleBoxes;
 			}
 		}

@@ -285,9 +285,9 @@ export function updateVisibility(pointclouds, camera, renderer){
 		if (visible){
 			let npoints = 0;
 
-			if (level > pointcloud.minRenderLevel){
+			if (level > (pointcloud.minRenderLevel || 0)){
 				npoints = node.getNumPoints();
-			}else if (level == pointcloud.minRenderLevel){
+			}else if (level == (pointcloud.minRenderLevel || 0)){
 				let n = node;
 
 				while (n != null){
@@ -312,7 +312,7 @@ export function updateVisibility(pointclouds, camera, renderer){
 			if (node.isLoaded()) {
 				node = pointcloud.toTreeNode(node, parent);
 			} else {
-				if (level >= pointcloud.minRenderLevel) unloadedGeometry.push(node);
+				if (level >= (pointcloud.minRenderLevel || 0)) unloadedGeometry.push(node);
 			}
 		}
 
@@ -332,10 +332,11 @@ export function updateVisibility(pointclouds, camera, renderer){
 
 			if (pointcloud.showBoundingBox && !node.boundingBoxNode && node.getBoundingBox) {
 				let boxHelper = new Box3Helper(node.getBoundingBox());
+				
 				boxHelper.matrixAutoUpdate = false;
 				pointcloud.boundingBoxNodes.push(boxHelper);
 				node.boundingBoxNode = boxHelper;
-				node.boundingBoxNode.matrix.copy(pointcloud.matrixWorld);
+				boxHelper.matrix.copy(pointcloud.matrixWorld);
 			} else if (pointcloud.showBoundingBox) {
 				node.boundingBoxNode.visible = true;
 				node.boundingBoxNode.matrix.copy(pointcloud.matrixWorld);

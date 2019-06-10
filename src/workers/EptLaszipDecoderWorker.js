@@ -38,8 +38,6 @@ async function readUsingDataView(event) {
 	let offset = decoder.header.pointOffset;
 	let mins = decoder.header.bounds.min;
 
-	let mean = [0, 0, 0];
-
 	let pBuff = new Buffer(numPoints * 3 * 4);
 	let cBuff = new Buffer(numPoints * 4);
 	let iBuff = new Buffer(numPoints * 4);
@@ -74,23 +72,17 @@ async function readUsingDataView(event) {
 		}
 	}
 
+	let min = event.data.bbmin;
+	let max = event.data.bbmax;
+
+	let size = [max[0] - min[0], max[1] - min[1], max[2] - min[2]].map((e, i) => scale[i] / e);
+	let off = offset.map((e, i) => (e - min[i]) / scale[i]);
+	
 	for (let i = 0; i < numPoints; i++) {
 		// POSITION
-		let ux = sourceView.getInt32(i * pointSize + 0, true);
-		let uy = sourceView.getInt32(i * pointSize + 4, true);
-		let uz = sourceView.getInt32(i * pointSize + 8, true);
-
-		x = ux * scale[0] + offset[0];
-		y = uy * scale[1] + offset[1];
-		z = uz * scale[2] + offset[2];
-
-		positions[3 * i + 0] = x;
-		positions[3 * i + 1] = y;
-		positions[3 * i + 2] = z;
-
-		mean[0] += x / numPoints;
-		mean[1] += y / numPoints;
-		mean[2] += z / numPoints;
+		positions[3 * i + 0] = (sourceView.getInt32(i * pointSize + 0, true) + off[0]) * size[0];
+		positions[3 * i + 1] = (sourceView.getInt32(i * pointSize + 4, true) + off[1]) * size[1];
+		positions[3 * i + 2] = (sourceView.getInt32(i * pointSize + 8, true) + off[2]) * size[2];
 
 		// INTENSITY
 		let intensity = sourceView.getUint16(i * pointSize + 12, true);
@@ -144,21 +136,6 @@ async function readUsingDataView(event) {
 	}
 
 	let pointCounts = [0, 0, 0, 0, 0, 0, 0, 0]
-
-	//normalize 0 - 1
-	{
-		let min = event.data.bbmin;
-		let max = event.data.bbmax;
-
-		let off = min;
-		let size = [max[0] - min[0], max[1] - min[1], max[2] - min[2]];
-
-		for (let i = 0; i < positions.length; i += 3){
-			positions[i + 0] = (positions[i + 0] - off[0]) / size[0];
-			positions[i + 1] = (positions[i + 1] - off[1]) / size[1];
-			positions[i + 2] = (positions[i + 2] - off[2]) / size[2];
-		}
-	}
 
 	//count all points and sort them into the 8 quadrents
 	{
@@ -314,7 +291,7 @@ async function readUsingDataView(event) {
 	let message = {
 		pointCounts,
 		numPoints,
-		mean: mean,
+		mean: [off[0] + .5 / size[0], off[1] + .5 / size[1], off[2] + .5 / size[2]],
 		position: attributes.position.buffer,
 		color: attributes.color.buffer,
 		intensity: attributes.intensity.buffer,
