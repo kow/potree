@@ -9,7 +9,7 @@ before_script:
   - npm -i -g gulp
 
 stages:
-  - build_deploy
+  - build
 
 build_app:
   stage: build
