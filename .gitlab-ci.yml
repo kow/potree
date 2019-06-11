@@ -11,9 +11,9 @@ before_script:
 stages:
   - build_deploy
 
-build_&_deploy_app:
-  stage: build_deploy
+build_app:
+  stage: build
   only:
-   - master
+   - develop
   script:
    - gulp build
