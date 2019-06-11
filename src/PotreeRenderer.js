@@ -579,25 +579,52 @@ export class Renderer {
 		for(let attributeName in geometry.attributes){
 			let bufferAttribute = geometry.attributes[attributeName];
 
-			let vbo = gl.createBuffer();
-			gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-			gl.bufferData(gl.ARRAY_BUFFER, bufferAttribute.array, gl.STATIC_DRAW);
+			if (attributeName == 'position'){ // convert position to normalized uint16
+				let arr = new Uint16Array(bufferAttribute.count * 3);
 
-			let attributeLocation = attributeLocations[attributeName];
-			let normalized = bufferAttribute.normalized;
-			let type = this.glTypeMapping.get(bufferAttribute.array.constructor);
+				for (let i = 0; i < arr.length; i++){
+					arr[i] = bufferAttribute.array[i] * 65535;
+				}
 
-			gl.vertexAttribPointer(attributeLocation, bufferAttribute.itemSize, type, normalized, 0, 0);
-			gl.enableVertexAttribArray(attributeLocation);
+				let vbo = gl.createBuffer();
+				gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+				gl.bufferData(gl.ARRAY_BUFFER, arr, gl.STATIC_DRAW);
 
-			webglBuffer.vbos.set(attributeName, {
-				handle: vbo,
-				name: attributeName,
-				count: bufferAttribute.count,
-				itemSize: bufferAttribute.itemSize,
-				type: geometry.attributes.position.array.constructor,
-				version: 0
-			});
+				let attributeLocation = attributeLocations[attributeName];
+				let normalized = bufferAttribute.normalized;
+
+				gl.vertexAttribPointer(attributeLocation, bufferAttribute.itemSize, gl.UNSIGNED_SHORT, true, 0, 0);
+				gl.enableVertexAttribArray(attributeLocation);
+
+				webglBuffer.vbos.set(attributeName, {
+					handle: vbo,
+					name: 'position',
+					count: bufferAttribute.count,
+					itemSize: 3,
+					type: Uint16Array,
+					version: 0
+				});
+			}else{
+				let vbo = gl.createBuffer();
+				gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+				gl.bufferData(gl.ARRAY_BUFFER, bufferAttribute.array, gl.STATIC_DRAW);
+
+				let attributeLocation = attributeLocations[attributeName];
+				let normalized = bufferAttribute.normalized;
+				let type = this.glTypeMapping.get(bufferAttribute.array.constructor);
+
+				gl.vertexAttribPointer(attributeLocation, bufferAttribute.itemSize, type, normalized, 0, 0);
+				gl.enableVertexAttribArray(attributeLocation);
+
+				webglBuffer.vbos.set(attributeName, {
+					handle: vbo,
+					name: attributeName,
+					count: bufferAttribute.count,
+					itemSize: bufferAttribute.itemSize,
+					type: geometry.attributes.position.array.constructor,
+					version: 0
+				});
+			}
 		}
 
 		gl.bindBuffer(gl.ARRAY_BUFFER, null);
