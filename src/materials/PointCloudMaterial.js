@@ -19,10 +19,6 @@ export class PointCloudMaterial extends THREE.RawShaderMaterial {
 	constructor (parameters = {}) {
 		super();
 
-		this.visibleNodesTexture = Utils.generateDataTexture(2048, 1, new THREE.Color(0xffffff));
-		this.visibleNodesTexture.minFilter = THREE.NearestFilter;
-		this.visibleNodesTexture.magFilter = THREE.NearestFilter;
-
 		let getValid = (a, b) => {
 			if(a !== undefined){
 				return a;
@@ -36,9 +32,8 @@ export class PointCloudMaterial extends THREE.RawShaderMaterial {
 		let maxSize = getValid(parameters.maxSize, 50.0);
 		let treeType = getValid(parameters.treeType, TreeType.OCTREE);
 
-		this._pointSizeType = PointSizeType.FIXED;
-		this._shape = PointShape.SQUARE;
-		this._pointColorType = PointColorType.RGB;
+		this._pointSizeType = PointSizeType.ADAPTIVE;
+		this._shape = PointShape.CIRCILE;
 		this._useClipBox = false;
 		this.clipBoxes = [];
 		//this.clipSpheres = [];
@@ -80,7 +75,7 @@ export class PointCloudMaterial extends THREE.RawShaderMaterial {
 			screenHeight:		{ type: "f", value: 1.0 },
 			near:				{ type: "f", value: 0.1 },
 			far:				{ type: "f", value: 1.0 },
-			uColor:				{ type: "c", value: new THREE.Color( 0xffffff ) },
+			uColor:				{ type: "c", value: new THREE.Color( 0 ) },
 			uOpacity:			{ type: "f", value: 1.0 },
 			size:				{ type: "f", value: pointSize },
 			minSize:			{ type: "f", value: minSize },
@@ -98,7 +93,6 @@ export class PointCloudMaterial extends THREE.RawShaderMaterial {
 			clipPolygonVCount:	{ type: "iv", value: [] },
 			clipPolygonVP:		{ type: "Matrix4fv", value: [] },
 
-			visibleNodes:		{ type: "t", value: this.visibleNodesTexture },
 			pcIndex:			{ type: "f", value: 0 },
 			gradient:			{ type: "t", value: this.gradientTexture },
 			classificationLUT:	{ type: "t", value: this.classificationTexture },
@@ -113,12 +107,6 @@ export class PointCloudMaterial extends THREE.RawShaderMaterial {
 			rgbGamma:			{ type: "f", value: 1 },
 			rgbContrast:		{ type: "f", value: 0 },
 			rgbBrightness:		{ type: "f", value: 0 },
-			wRGB:				{ type: "f", value: 1 },
-			wIntensity:			{ type: "f", value: 0 },
-			wElevation:			{ type: "f", value: 0 },
-			wClassification:	{ type: "f", value: 0 },
-			wReturnNumber:		{ type: "f", value: 0 },
-			wSourceID:			{ type: "f", value: 0 },
 			useOrthographicCamera: { type: "b", value: false },
 			clipTask:			{ type: "i", value: 1 },
 			clipMethod:			{ type: "i", value: 1 },
@@ -133,6 +121,24 @@ export class PointCloudMaterial extends THREE.RawShaderMaterial {
 			uFilterReturnNumberRange:		{ type: "fv", value: [0, 7]},
 			uFilterNumberOfReturnsRange:	{ type: "fv", value: [0, 7]},
 			uFilterGPSTimeClipRange:		{ type: "fv", value: [0, 7]},
+
+			classificationFilters: {type: 'fv', value: []},
+		};
+
+		this.colorMixer = {
+			"rgb": 1,
+			"height": 0,
+			"rgb_height": 0,
+			"depth": 0,
+			"intensity": 0,
+			"gpstime": 0,
+			"intensity_gradient": 0,
+			"lod": 0,
+			"point_index": 0,
+			"classification": 0,
+			"return_number": 0,
+			"source": 0,
+			"normal": 0,
 		};
 
 		this.classification = ClassificationScheme.DEFAULT;
@@ -149,8 +155,8 @@ export class PointCloudMaterial extends THREE.RawShaderMaterial {
 		//	this.fragmentShader = this.getDefines() + Shaders['pointcloud.fs'];
 		//}
 
-		this.vertexShader = Shaders['pointcloud.vs'];
-		this.fragmentShader = Shaders['pointcloud.fs'];
+		this.vertexShader = this.getDefines() + Shaders['pointcloud.vs'];
+		this.fragmentShader = this.getDefines() + Shaders['pointcloud.fs'];
 
 		
 		this.vertexColors = THREE.VertexColors;
@@ -232,6 +238,10 @@ export class PointCloudMaterial extends THREE.RawShaderMaterial {
 			defines.push('#define adaptive_point_size');
 		}
 
+		if (this.uniforms.classificationFilters.value.length){
+			defines.push('#define clip_classification ' + this.uniforms.classificationFilters.value.length);
+		}
+
 		if (this.shape === PointShape.SQUARE) {
 			defines.push('#define square_point_shape');
 		} else if (this.shape === PointShape.CIRCLE) {
@@ -248,40 +258,16 @@ export class PointCloudMaterial extends THREE.RawShaderMaterial {
 			defines.push('#define snap_enabled');
 		}
 
-		if (this._pointColorType === PointColorType.RGB) {
-			defines.push('#define color_type_rgb');
-		} else if (this._pointColorType === PointColorType.COLOR) {
-			defines.push('#define color_type_color');
-		} else if (this._pointColorType === PointColorType.DEPTH) {
-			defines.push('#define color_type_depth');
-		} else if (this._pointColorType === PointColorType.HEIGHT) {
-			defines.push('#define color_type_height');
-		} else if (this._pointColorType === PointColorType.INTENSITY) {
-			defines.push('#define color_type_intensity');
-		} else if (this._pointColorType === PointColorType.INTENSITY_GRADIENT) {
-			defines.push('#define color_type_intensity_gradient');
-		} else if (this._pointColorType === PointColorType.LOD) {
-			defines.push('#define color_type_lod');
-		} else if (this._pointColorType === PointColorType.POINT_INDEX) {
-			defines.push('#define color_type_point_index');
-		} else if (this._pointColorType === PointColorType.CLASSIFICATION) {
-			defines.push('#define color_type_classification');
-		} else if (this._pointColorType === PointColorType.RETURN_NUMBER) {
-			defines.push('#define color_type_return_number');
-		} else if (this._pointColorType === PointColorType.SOURCE) {
-			defines.push('#define color_type_source');
-		} else if (this._pointColorType === PointColorType.NORMAL) {
-			defines.push('#define color_type_normal');
-		} else if (this._pointColorType === PointColorType.PHONG) {
-			defines.push('#define color_type_phong');
-		} else if (this._pointColorType === PointColorType.RGB_HEIGHT) {
-			defines.push('#define color_type_rgb_height');
-		} else if (this._pointColorType === PointColorType.GPS_TIME) {
-			defines.push('#define color_type_gpstime');
-		} else if (this._pointColorType === PointColorType.COMPOSITE) {
-			defines.push('#define color_type_composite');
+		{
+			let index = 0;
+
+			for (var o in this.colorMixer){
+				if (this.colorMixer[o]){
+					defines.push('#define color_weight_' + o + ' ' + (index++))
+				}
+			}
 		}
-		
+
 		if(this._treeType === TreeType.OCTREE){
 			defines.push('#define tree_type_octree');
 		}else if(this._treeType === TreeType.KDTREE){
@@ -317,8 +303,8 @@ export class PointCloudMaterial extends THREE.RawShaderMaterial {
 
 		for (let i = 0; i < this.clipBoxes.length; i++) {
 			let box = clipBoxes[i];
-
-			this.uniforms.clipBoxes.value.set(box.inverse.elements, 16 * i);
+			
+			this.uniforms.clipBoxes.value.set(box.matrix.elements, 16 * i);
 		}
 
 		for (let i = 0; i < this.uniforms.clipBoxes.value.length; i++) {
@@ -575,22 +561,114 @@ export class PointCloudMaterial extends THREE.RawShaderMaterial {
 		}
 	}
 
-	get pointColorType () {
-		return this._pointColorType;
+	colorWeight (name, weight){
+		if (!(name in this.colorMixer)){
+			throw new Error("no color property exists of the name: " + name);
+		}
+
+		var previous = this.colorMixer[name];
+
+		if (weight != previous){
+			this.colorMixer[name] = weight;
+
+			if ((weight === 0) != (previous === 0)){
+				this.updateShaderSource();
+			}else{
+				this.dispatchEvent({
+					type: 'material_property_changed',
+					target: this
+				});
+			}
+		}
 	}
 
-	set pointColorType (value) {
-		if (this._pointColorType !== value) {
-			this._pointColorType = value;
+	set visibleClassifications (v) {
+		let l = this.uniforms.classificationFilters.value;
+
+		if (l.length == v.length){
+			let found = false;
+
+			for (let i = 0; i < l.length; i++){
+				if (v[i] != l[i]){
+					found = true;
+					break;
+				}
+			}
+
+			if (!found){
+				return; 
+			}
+		}
+
+		this.uniforms.classificationFilters.value = new Float32Array(v);
+
+		if (l.length != v.length){
 			this.updateShaderSource();
-			this.dispatchEvent({
-				type: 'point_color_type_changed',
-				target: this
-			});
+		}else{
 			this.dispatchEvent({
 				type: 'material_property_changed',
 				target: this
 			});
+		}
+	}
+
+	get pointColorType (){
+		var candidate = null;
+		var composite = false;
+
+		for (var o in this.colorMixer){
+			if (this.colorMixer[o] == 1.){
+				if (candidate) composite = true;
+				candidate = o;
+			}else if (this.colorMixer[o] != 0){
+				composite = true;
+			}
+		}
+
+		if (composite || !candidate){
+			return PointColorType.COMPOSITE;
+		}else if (!candidate){
+			return PointColorType.COLOR;
+		}else{
+			return {
+				"classification": PointColorType.CLASSIFICATION,
+				"depth": PointColorType.DEPTH,
+				"elevation": PointColorType.ELEVATION,
+				"gpstime": PointColorType.GPS_TIME,
+				"height": PointColorType.HEIGHT,
+				"intensity": PointColorType.INTENSITY,
+				"intensity_gradient": PointColorType.INTENSITY_GRADIENT,
+				"lod": PointColorType.LOD,
+				"normal": PointColorType.NORMAL,
+				"point_index": PointColorType.POINT_INDEX,
+				"return_number": PointColorType.RETURN_NUMBER,
+				"rgb": PointColorType.RGB,
+				"rgb_height": PointColorType.RGB_HEIGHT,
+				"source": PointColorType.SOURCE,
+			}[candidate];
+		}
+	}
+
+	set pointColorType (value) {
+		var name = {
+			8: "classification",
+			2: "depth",
+			3: "elevation",
+			14: "gpstime",
+			3: "height",
+			4: "intensity",
+			5: "intensity_gradient",
+			6: "lod",
+			11: "normal",
+			7: "point_index",
+			9: "return_number",
+			0: "rgb",
+			13: "rgb_height",
+			10: "source"
+		}[value];
+
+		for (var o in this.colorMixer){
+			this.colorWeight(o, o == name ? 1 : 0);
 		}
 	}
 
@@ -842,90 +920,6 @@ export class PointCloudMaterial extends THREE.RawShaderMaterial {
 	set rgbBrightness (value) {
 		if (this.uniforms.rgbBrightness.value !== value) {
 			this.uniforms.rgbBrightness.value = value;
-			this.dispatchEvent({
-				type: 'material_property_changed',
-				target: this
-			});
-		}
-	}
-
-	get weightRGB () {
-		return this.uniforms.wRGB.value;
-	}
-
-	set weightRGB (value) {
-		if(this.uniforms.wRGB.value !== value){
-			this.uniforms.wRGB.value = value;
-			this.dispatchEvent({
-				type: 'material_property_changed',
-				target: this
-			});
-		}
-	}
-
-	get weightIntensity () {
-		return this.uniforms.wIntensity.value;
-	}
-
-	set weightIntensity (value) {
-		if(this.uniforms.wIntensity.value !== value){
-			this.uniforms.wIntensity.value = value;
-			this.dispatchEvent({
-				type: 'material_property_changed',
-				target: this
-			});
-		}
-	}
-
-	get weightElevation () {
-		return this.uniforms.wElevation.value;
-	}
-
-	set weightElevation (value) {
-		if(this.uniforms.wElevation.value !== value){
-			this.uniforms.wElevation.value = value;
-			this.dispatchEvent({
-				type: 'material_property_changed',
-				target: this
-			});
-		}
-	}
-
-	get weightClassification () {
-		return this.uniforms.wClassification.value;
-	}
-
-	set weightClassification (value) {
-		if(this.uniforms.wClassification.value !== value){
-			this.uniforms.wClassification.value = value;
-			this.dispatchEvent({
-				type: 'material_property_changed',
-				target: this
-			});
-		}
-	}
-
-	get weightReturnNumber () {
-		return this.uniforms.wReturnNumber.value;
-	}
-
-	set weightReturnNumber (value) {
-		if(this.uniforms.wReturnNumber.value !== value){
-			this.uniforms.wReturnNumber.value = value;
-			this.dispatchEvent({
-				type: 'material_property_changed',
-				target: this
-			});
-		}
-	}
-
-	get weightSourceID () {
-		return this.uniforms.wSourceID.value;
-	}
-
-	set weightSourceID (value) {
-		if(this.uniforms.wSourceID.value !== value){
-			this.uniforms.wSourceID.value = value;
 			this.dispatchEvent({
 				type: 'material_property_changed',
 				target: this

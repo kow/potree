@@ -406,6 +406,17 @@ class Shader {
 		gl.uniform3f(location, value[0], value[1], value[2]);
 	}
 
+	setUniform4f(name, value) {
+		const gl = this.gl;
+		const location = this.uniformLocations[name];
+		
+		if (location == null) {
+			return;
+		}
+		
+		gl.uniform4fv(location, value);
+	}
+
 	setUniform(name, value) {
 
 		if (value.constructor === THREE.Matrix4) {
@@ -523,13 +534,20 @@ class WebGLTexture {
 };
 
 class WebGLBuffer {
-
 	constructor() {
 		this.numElements = 0;
 		this.vao = null;
 		this.vbos = new Map();
 	}
 
+	dispose () {
+		this.disposed = true;
+		this.gl.deleteVertexArray(this.vao);
+
+		for (let o of this.vbos){
+			this.gl.deleteBuffer(o.handle);
+		}
+	}
 };
 
 export class Renderer {
@@ -538,7 +556,6 @@ export class Renderer {
 		this.threeRenderer = threeRenderer;
 		this.gl = this.threeRenderer.context;
 
-		this.buffers = new Map();
 		this.shaders = new Map();
 		this.textures = new Map();
 
@@ -553,6 +570,7 @@ export class Renderer {
 	createBuffer(geometry){
 		let gl = this.gl;
 		let webglBuffer = new WebGLBuffer();
+		webglBuffer.gl = gl;
 		webglBuffer.vao = gl.createVertexArray();
 		webglBuffer.numElements = geometry.attributes.position.count;
 
@@ -561,25 +579,52 @@ export class Renderer {
 		for(let attributeName in geometry.attributes){
 			let bufferAttribute = geometry.attributes[attributeName];
 
-			let vbo = gl.createBuffer();
-			gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-			gl.bufferData(gl.ARRAY_BUFFER, bufferAttribute.array, gl.STATIC_DRAW);
+			if (attributeName == 'position'){ // convert position to normalized uint16
+				let arr = new Uint16Array(bufferAttribute.count * 3);
 
-			let attributeLocation = attributeLocations[attributeName];
-			let normalized = bufferAttribute.normalized;
-			let type = this.glTypeMapping.get(bufferAttribute.array.constructor);
+				for (let i = 0; i < arr.length; i++){
+					arr[i] = bufferAttribute.array[i] * 65535;
+				}
 
-			gl.vertexAttribPointer(attributeLocation, bufferAttribute.itemSize, type, normalized, 0, 0);
-			gl.enableVertexAttribArray(attributeLocation);
+				let vbo = gl.createBuffer();
+				gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+				gl.bufferData(gl.ARRAY_BUFFER, arr, gl.STATIC_DRAW);
 
-			webglBuffer.vbos.set(attributeName, {
-				handle: vbo,
-				name: attributeName,
-				count: bufferAttribute.count,
-				itemSize: bufferAttribute.itemSize,
-				type: geometry.attributes.position.array.constructor,
-				version: 0
-			});
+				let attributeLocation = attributeLocations[attributeName];
+				let normalized = bufferAttribute.normalized;
+
+				gl.vertexAttribPointer(attributeLocation, bufferAttribute.itemSize, gl.UNSIGNED_SHORT, true, 0, 0);
+				gl.enableVertexAttribArray(attributeLocation);
+
+				webglBuffer.vbos.set(attributeName, {
+					handle: vbo,
+					name: 'position',
+					count: bufferAttribute.count,
+					itemSize: 3,
+					type: Uint16Array,
+					version: 0
+				});
+			}else{
+				let vbo = gl.createBuffer();
+				gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+				gl.bufferData(gl.ARRAY_BUFFER, bufferAttribute.array, gl.STATIC_DRAW);
+
+				let attributeLocation = attributeLocations[attributeName];
+				let normalized = bufferAttribute.normalized;
+				let type = this.glTypeMapping.get(bufferAttribute.array.constructor);
+
+				gl.vertexAttribPointer(attributeLocation, bufferAttribute.itemSize, type, normalized, 0, 0);
+				gl.enableVertexAttribArray(attributeLocation);
+
+				webglBuffer.vbos.set(attributeName, {
+					handle: vbo,
+					name: attributeName,
+					count: bufferAttribute.count,
+					itemSize: bufferAttribute.itemSize,
+					type: geometry.attributes.position.array.constructor,
+					version: 0
+				});
+			}
 		}
 
 		gl.bindBuffer(gl.ARRAY_BUFFER, null);
@@ -588,10 +633,8 @@ export class Renderer {
 		return webglBuffer;
 	}
 
-	updateBuffer(geometry){
+	updateBuffer(geometry, webglBuffer){
 		let gl = this.gl;
-
-		let webglBuffer = this.buffers.get(geometry);
 
 		gl.bindVertexArray(webglBuffer.vao);
 
@@ -629,48 +672,17 @@ export class Renderer {
 		gl.bindVertexArray(null);
 	}
 
-	traverse(scene) {
-
-		let octrees = [];
-
-		let stack = [scene];
-		while (stack.length > 0) {
-
-			let node = stack.pop();
-
-			if (node instanceof PointCloudTree) {
-				octrees.push(node);
-				continue;
-			}
-
-			let visibleChildren = node.children.filter(c => c.visible);
-			stack.push(...visibleChildren);
-
-		}
-
-		let result = {
-			octrees: octrees
-		};
-
-		return result;
-	}
-
-
-
-	renderNodes(octree, nodes, visibilityTextureData, camera, target, shader, params) {
-
-		if (exports.measureTimings) performance.mark("renderNodes-start");
-
+	renderNode(octree, node, transform, target, shader, params = {}) {
 		let gl = this.gl;
 
 		let material = params.material ? params.material : octree.material;
 		let shadowMaps = params.shadowMaps == null ? [] : params.shadowMaps;
-		let view = camera.matrixWorldInverse;
 		let worldView = new THREE.Matrix4();
 
 		let mat4holder = new Float32Array(16);
+		let PCIndex = 0;
 
-		let gpsMin = Infinity;
+		/*let gpsMin = Infinity;
 		let gpsMax = -Infinity
 		for (let node of nodes) {
 
@@ -689,65 +701,52 @@ export class Renderer {
 
 			break;
 
-		}
+		}*/
 
-		let i = 0;
-		for (let node of nodes) {
+		var childrenMasking = 0;
+		var children = [null, null, null, null, null, null, null, null];
+		let level = node.getLevel();
+		
+		if (!params.nodeList || (PCIndex = params.nodeList.indexOf(node.sceneNode)) >= 0){
+			for (var ii = 0; ii < 8; ii++){
+				let child = node.children[ii];
+				let index = (ii & 2) | ((ii & 1) << 2) | ((ii & 4) >> 2);
 
-			if(exports.debug.allowedNodes !== undefined){
-				if(!exports.debug.allowedNodes.includes(node.name)){
-					continue;
+				if (child && child.geometryNode && child.geometryNode.visible){
+					childrenMasking |= 1 << index;
+					children[index] = node.children[ii];
+				}else if (node.geometryNode && node.geometryNode.pointCounts && node.geometryNode.pointCounts[index] == 0){
+					childrenMasking |= 1 << index;
 				}
 			}
-
-			//if(![
-			//	"r42006420226",
-			//	]
-			//	.includes(node.name)){
-			//	continue;
-			//}
-
-			let world = node.sceneNode.matrixWorld;
-			worldView.multiplyMatrices(view, world);
-			//this.multiplyViewWithScaleTrans(view, world, worldView);
-
-			if (visibilityTextureData) {
-				let vnStart = visibilityTextureData.offsets.get(node);
-				shader.setUniform1f("uVNStart", vnStart);
-			}
-
-
-			let level = node.getLevel();
-
-			if(node.debug){
-				shader.setUniform("uDebug", true);
-			}else{
-				shader.setUniform("uDebug", false);
-			}
-
-			let isLeaf;
-			if(node instanceof PointCloudOctreeNode){
-				isLeaf = Object.keys(node.children).length === 0;
-			}else if(node instanceof PointCloudArena4DNode){
-				isLeaf = node.geometryNode.isLeaf;
-			}
-			shader.setUniform("uIsLeafNode", isLeaf);
-
-
-			// TODO consider passing matrices in an array to avoid uniformMatrix4fv overhead
-			const lModel = shader.uniformLocations["modelMatrix"];
+		}
+		
+		//render this node
+		if (node.geometryNode && node.geometryNode.geometry && childrenMasking != 255 && node.geometryNode.level >= (octree.minRenderLevel || 0)){
+			/*const lModel = shader.uniformLocations["modelMatrix"];
 			if (lModel) {
 				mat4holder.set(world.elements);
 				gl.uniformMatrix4fv(lModel, false, mat4holder);
-			}
+			}*/
 
-			const lModelView = shader.uniformLocations["modelViewMatrix"];
-			//mat4holder.set(worldView.elements);
-			// faster then set in chrome 63
-			for(let j = 0; j < 16; j++){
-				mat4holder[j] = worldView.elements[j];
-			}
-			gl.uniformMatrix4fv(lModelView, false, mat4holder);
+			gl.uniformMatrix4fv(shader.uniformLocations["modelViewMatrix"], false, transform.elements);
+			
+			shader.setUniform1f('uLevel', level);
+			shader.setUniform1f("uNodeSpacing", node.geometryNode.spacing);
+			shader.setUniform1f("setChildren", childrenMasking);
+
+			let geometry = node.geometryNode.geometry;
+
+			/*if(node.geometryNode.gpsTime){
+				let nodeMin = node.geometryNode.gpsTime.offset;
+				let nodeMax = nodeMin + node.geometryNode.gpsTime.range;
+
+				let gpsOffset = (+nodeMin - gpsMin);
+				let gpsRange = (gpsMax - gpsMin);
+
+				shader.setUniform1f("uGPSOffset", gpsOffset);
+				shader.setUniform1f("uGPSRange", gpsRange);
+			}*/
 
 			{ // Clip Polygons
 				if(material.clipPolygons && material.clipPolygons.length > 0){
@@ -790,16 +789,59 @@ export class Renderer {
 				}
 			}
 
+			{
+				//let uFilterGPSTimeClipRange = material.uniforms.uFilterGPSTimeClipRange.value;
+				
+				//let gpsCliPRangeMin = uFilterGPSTimeClipRange[0] - gpsMin;
+				//let gpsCliPRangeMax = uFilterGPSTimeClipRange[1] - gpsMin;
+				
+				shader.setUniform2f("uFilterReturnNumberRange", material.uniforms.uFilterReturnNumberRange.value);
+				shader.setUniform2f("uFilterNumberOfReturnsRange", material.uniforms.uFilterNumberOfReturnsRange.value);
+				//shader.setUniform2f("uFilterGPSTimeClipRange", [gpsCliPRangeMin, gpsCliPRangeMax]);
+			}
 
-			//shader.setUniformMatrix4("modelMatrix", world);
-			//shader.setUniformMatrix4("modelViewMatrix", worldView);
-			shader.setUniform1f("uLevel", level);
-			shader.setUniform1f("uNodeSpacing", node.geometryNode.estimatedSpacing);
+			shader.setUniform1f("uPCIndex", PCIndex);
+			let webglBuffer = null;
+			if (!node.geometryNode.webglBuffer || node.geometryNode.webglBuffer.disposed){
+				webglBuffer = node.geometryNode.webglBuffer = this.createBuffer(geometry);
+			}else{
+				webglBuffer = node.geometryNode.webglBuffer
+				let update = false;
 
-			shader.setUniform1f("uPCIndex", i);
+				for(let attributeName in geometry.attributes){
+					let attribute = geometry.attributes[attributeName];
+
+					if(attribute.version > webglBuffer.vbos.get(attributeName).version){
+						update = true;
+						break;
+					}
+				}
+
+				if (update){
+					this.updateBuffer(geometry, webglBuffer);
+				}
+			}
+
+			if (webglBuffer){
+				gl.bindVertexArray(webglBuffer.vao);
+				gl.drawArrays(gl.POINTS, 0, webglBuffer.numElements);
+				gl.bindVertexArray(null);
+			}
+		}
+
+		for (var i = 0; i < 8; i++){
+			if (children[i]){
+				var matrix = transform.clone();
+				matrix.scale(new THREE.Vector3(0.5, 0.5, 0.5));
+				matrix.multiply(new THREE.Matrix4().makeTranslation(i & 1, (i & 2) >> 1, (i & 4) >> 2));
+
+				this.renderNode(octree, children[i], matrix, target, shader, params);
+			}
+		}
+
 			// uBBSize
 
-			if (shadowMaps.length > 0) {
+			/*if (shadowMaps.length > 0) {
 
 				const lShadowMap = shader.uniformLocations["uShadowMap[0]"];
 
@@ -834,66 +876,22 @@ export class Renderer {
 					const lProj = shader.uniformLocations["uShadowProj[0]"];
 					gl.uniformMatrix4fv(lProj, false, flattenedMatrices);
 				}
-			}
-
-			let geometry = node.geometryNode.geometry;
-
-			if(node.geometryNode.gpsTime){
-				let nodeMin = node.geometryNode.gpsTime.offset;
-				let nodeMax = nodeMin + node.geometryNode.gpsTime.range;
-
-				let gpsOffset = (+nodeMin - gpsMin);
-				let gpsRange = (gpsMax - gpsMin);
-
-				shader.setUniform1f("uGPSOffset", gpsOffset);
-				shader.setUniform1f("uGPSRange", gpsRange);
-			}
-
-			{
-				let uFilterReturnNumberRange = material.uniforms.uFilterReturnNumberRange.value;
-				let uFilterNumberOfReturnsRange = material.uniforms.uFilterNumberOfReturnsRange.value;
-				let uFilterGPSTimeClipRange = material.uniforms.uFilterGPSTimeClipRange.value;
-				
-				let gpsCliPRangeMin = uFilterGPSTimeClipRange[0] - gpsMin;
-				let gpsCliPRangeMax = uFilterGPSTimeClipRange[1] - gpsMin;
-				
-				shader.setUniform2f("uFilterReturnNumberRange", uFilterReturnNumberRange);
-				shader.setUniform2f("uFilterNumberOfReturnsRange", uFilterNumberOfReturnsRange);
-				shader.setUniform2f("uFilterGPSTimeClipRange", [gpsCliPRangeMin, gpsCliPRangeMax]);
-			}
-
-			let webglBuffer = null;
-			if(!this.buffers.has(geometry)){
-				webglBuffer = this.createBuffer(geometry);
-				this.buffers.set(geometry, webglBuffer);
-			}else{
-				webglBuffer = this.buffers.get(geometry);
-				for(let attributeName in geometry.attributes){
-					let attribute = geometry.attributes[attributeName];
-
-					if(attribute.version > webglBuffer.vbos.get(attributeName).version){
-						this.updateBuffer(geometry);
-					}
-				}
-			}
-
-			gl.bindVertexArray(webglBuffer.vao);
-
-			let numPoints = webglBuffer.numElements;
-			gl.drawArrays(gl.POINTS, 0, numPoints);
-
-			i++;
-		}
-
-		gl.bindVertexArray(null);
-
-		if (exports.measureTimings) {
-			performance.mark("renderNodes-end");
-			performance.measure("render.renderNodes", "renderNodes-start", "renderNodes-end");
-		}
+			}*/
 	}
 
-	renderOctree(octree, nodes, camera, target, params = {}){
+	renderOctree(octree, camera, target, params = {}){
+		//update view matrix to match octree projection
+		if (camera.controls){
+			let matrix = camera.controls.update(0, octree.projection);
+			camera.position.copy(camera.controls.position);			
+			camera.matrix.copy({elements: matrix});
+
+			camera.matrixAutoUpdate = false;
+			camera.updateMatrixWorld(true);
+		}
+
+		octree.viewMatrixWorld = camera.matrixWorld.clone();
+		octree.viewMatrixWorldInv = camera.matrixWorldInverse.clone();
 
 		let gl = this.gl;
 
@@ -906,24 +904,6 @@ export class Renderer {
 		let worldView = new THREE.Matrix4();
 
 		let shader = null;
-		let visibilityTextureData = null;
-
-		let currentTextureBindingPoint = 0;
-
-		if (material.pointSizeType >= 0) {
-			if (material.pointSizeType === PointSizeType.ADAPTIVE ||
-				material.pointColorType === PointColorType.LOD) {
-
-				let vnNodes = (params.vnTextureNodes != null) ? params.vnTextureNodes : nodes;
-				visibilityTextureData = octree.computeVisibilityTextureData(vnNodes, camera);
-
-				const vnt = material.visibleNodesTexture;
-				const data = vnt.image.data;
-				data.set(visibilityTextureData.data);
-				vnt.needsUpdate = true;
-
-			}
-		}
 
 		{ // UPDATE SHADER AND TEXTURES
 			if (!this.shaders.has(material)) {
@@ -1082,6 +1062,7 @@ export class Renderer {
 			shader.setUniform1f("fov", Math.PI * camera.fov / 180);
 			shader.setUniform1f("near", camera.near);
 			shader.setUniform1f("far", camera.far);
+			shader.setUniform1f("nearPlaneHeight", screenHeight / 2 / Math.tan((Math.PI * camera.fov / 180) / 2));
 			
 			if(camera instanceof THREE.OrthographicCamera){
 				shader.setUniform("uUseOrthographicCamera", true);
@@ -1098,15 +1079,34 @@ export class Renderer {
 			}
 
 			shader.setUniform1i("clipMethod", material.clipMethod);
+			
+			//being lazy here using a different math library than three
+			if (Math.Vector && material.clipBoxes && material.clipBoxes.length > 0) {
+				let orig = material.uniforms.clipBoxes.value;
+				let uni = new Float32Array(orig.length);
+				let view = Math.mat4(viewInv.elements);
 
-			if (material.clipBoxes && material.clipBoxes.length > 0) {
-				//let flattenedMatrices = [].concat(...material.clipBoxes.map(c => c.inverse.elements));
+				for (let i = 0; i < orig.length; i += 16){
+					//project
+					let mat = Math.mat4(orig.slice(i, 16));
 
-				//const lClipBoxes = shader.uniformLocations["clipBoxes[0]"];
-				//gl.uniformMatrix4fv(lClipBoxes, false, flattenedMatrices);
+					if (camera.controls && camera.controls.project){
+						let p = camera.controls.project(octree.projection);
 
-				const lClipBoxes = shader.uniformLocations["clipBoxes[0]"];
-				gl.uniformMatrix4fv(lClipBoxes, false, material.uniforms.clipBoxes.value);
+						try {
+							let origin = p(Math.vec3(0).multiply(mat));
+							let x = p(Math.vec3(1, 0, 0).multiply(mat)).subtract(origin);
+							let y = p(Math.vec3(0, 1, 0).multiply(mat)).subtract(origin);
+							let z = p(Math.vec3(0, 0, 1).multiply(mat)).subtract(origin);
+
+							mat = Math.mat4(x, 0, y, 0, z, 0, origin, 1);
+						}catch (e){}
+					}
+
+					uni.set(mat.invert().multiply(view), i);
+				}
+
+				gl.uniformMatrix4fv(shader.uniformLocations["clipBoxes[0]"], false, uni);
 			}
 
 			// TODO CLIPSPHERES
@@ -1138,34 +1138,14 @@ export class Renderer {
 				//gl.uniformMatrix4fv(lClipSpheres, false, material.uniforms.clipSpheres.value);
 			}
 
-			if(Potree.Features.WEBGL2.isSupported()){
-				let buffer = new ArrayBuffer(12);
-				let bufferf32 = new Float32Array(buffer);
-				bufferf32[0] = material.size;
-				bufferf32[1] = material.uniforms.minSize.value;
-				bufferf32[2] = material.uniforms.maxSize.value;
-
-				let block = shader.uniformBlocks["ubo_point"];
-
-				gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, block.buffer);
-
-				gl.bindBuffer(gl.UNIFORM_BUFFER, block.buffer);
-				gl.bufferSubData(gl.UNIFORM_BUFFER, 0, buffer);
-				gl.bindBuffer(gl.UNIFORM_BUFFER, null);
-				
-			}else{
-				shader.setUniform1f("size", material.size);
-				shader.setUniform1f("maxSize", material.uniforms.maxSize.value);
-				shader.setUniform1f("minSize", material.uniforms.minSize.value);
-			}
-
-
-
+			shader.setUniform1f("size", material.size);
+			shader.setUniform1f("maxSize", material.uniforms.maxSize.value);
+			shader.setUniform1f("minSize", material.uniforms.minSize.value);
 
 			// uniform float uPCIndex
 			shader.setUniform1f("uOctreeSpacing", material.spacing);
 			shader.setUniform("uOctreeSize", material.uniforms.octreeSize.value);
-
+			gl.uniform1fv(shader.uniformLocations["classificationFilters[0]"], material.uniforms.classificationFilters.value);
 
 			//uniform vec3 uColor;
 			shader.setUniform3f("uColor", material.color.toArray());
@@ -1185,18 +1165,21 @@ export class Renderer {
 			shader.setUniform1f("rgbContrast", material.rgbContrast);
 			shader.setUniform1f("rgbBrightness", material.rgbBrightness);
 			shader.setUniform1f("uTransition", material.transition);
-			shader.setUniform1f("wRGB", material.weightRGB);
-			shader.setUniform1f("wIntensity", material.weightIntensity);
-			shader.setUniform1f("wElevation", material.weightElevation);
-			shader.setUniform1f("wClassification", material.weightClassification);
-			shader.setUniform1f("wReturnNumber", material.weightReturnNumber);
-			shader.setUniform1f("wSourceID", material.weightSourceID);
+			
+			{
+				let weights = new Float32Array(16);
+				let i = 0;
 
-			let vnWebGLTexture = this.textures.get(material.visibleNodesTexture);
-			shader.setUniform1i("visibleNodesTexture", currentTextureBindingPoint);
-			gl.activeTexture(gl.TEXTURE0 + currentTextureBindingPoint);
-			gl.bindTexture(vnWebGLTexture.target, vnWebGLTexture.id);
-			currentTextureBindingPoint++;
+				for (var o in material.colorMixer){
+					if (material.colorMixer[o]){
+						weights[i++] = material.colorMixer[o];
+					}
+				}
+
+				gl.uniform1fv(shader.uniformLocations["colorWeights[0]"], weights);
+			}
+
+			let currentTextureBindingPoint = 0;
 
 			let gradientTexture = this.textures.get(material.gradientTexture);
 			shader.setUniform1i("gradient", currentTextureBindingPoint);
@@ -1272,16 +1255,34 @@ export class Renderer {
 
 			}
 		}
+		
+		if (octree.root.sceneNode){
+			var matrix = camera.matrixWorldInverse.clone();
+			matrix.multiply(octree.root.sceneNode.matrixWorld);
 
-		this.renderNodes(octree, nodes, visibilityTextureData, camera, target, shader, params);
+			let min = octree.root.pointcloud.boundingBox.min;
+			let max = octree.root.pointcloud.boundingBox.max;
+
+			matrix.scale({x: max.x - min.x, y: max.y - min.y, z: max.z - min.z});
+
+			this.renderNode(octree, octree.root, matrix, target, shader, params);
+		}
 
 		gl.activeTexture(gl.TEXTURE2);
 		gl.bindTexture(gl.TEXTURE_2D, null);
 		gl.activeTexture(gl.TEXTURE0);
+
+		if (camera.controls){
+			let matrix = camera.controls.update(0);
+			camera.position.copy(camera.controls.position);			
+			camera.matrix.copy({elements: matrix});
+
+			camera.matrixAutoUpdate = false;
+			camera.updateMatrixWorld(true);
+		}
 	}
 
-	render(scene, camera, target = null, params = {}) {
-
+	render(octree, camera, target = null, params = {}) {
 		const gl = this.gl;
 
 		// PREPARE 
@@ -1290,26 +1291,15 @@ export class Renderer {
 		}
 
 		camera.updateProjectionMatrix();
-
-		const traversalResult = this.traverse(scene);
-
-
-		// RENDER
-		for (const octree of traversalResult.octrees) {
-			let nodes = octree.visibleNodes;
-			this.renderOctree(octree, nodes, camera, target, params);
-		}
-
+		this.renderOctree(octree, camera, target, params);
 
 		// CLEANUP
+		gl.bindVertexArray(null);
 		gl.activeTexture(gl.TEXTURE1);
 		gl.bindTexture(gl.TEXTURE_2D, null)
 
 		this.threeRenderer.state.reset();
 	}
-
-
-
 };
 
 

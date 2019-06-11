@@ -40,6 +40,10 @@ export class EyeDomeLightingMaterial extends THREE.ShaderMaterial{
 			lights: false
 		});
 
+		this.extensions = {
+			fragDepth: true
+		}
+
 		this.neighbourCount = 8;
 	}
 

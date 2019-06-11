@@ -55,45 +55,6 @@ export class PointCloudOctreeNode extends PointCloudTreeNode {
 		return children;
 	}
 
-	getPointsInBox(boxNode){
-
-		if(!this.sceneNode){
-			return null;
-		}
-
-		let buffer = this.geometryNode.buffer;
-
-		let posOffset = buffer.offset("position");
-		let stride = buffer.stride;
-		let view = new DataView(buffer.data);
-
-		let worldToBox = new THREE.Matrix4().getInverse(boxNode.matrixWorld);
-		let objectToBox = new THREE.Matrix4().multiplyMatrices(worldToBox, this.sceneNode.matrixWorld);
-
-		let inBox = [];
-
-		let pos = new THREE.Vector4();
-		for(let i = 0; i < buffer.numElements; i++){
-			let x = view.getFloat32(i * stride + posOffset + 0, true);
-			let y = view.getFloat32(i * stride + posOffset + 4, true);
-			let z = view.getFloat32(i * stride + posOffset + 8, true);
-
-			pos.set(x, y, z, 1);
-			pos.applyMatrix4(objectToBox);
-
-			if(-0.5 < pos.x && pos.x < 0.5){
-				if(-0.5 < pos.y && pos.y < 0.5){
-					if(-0.5 < pos.z && pos.z < 0.5){
-						pos.set(x, y, z, 1).applyMatrix4(this.sceneNode.matrixWorld);
-						inBox.push(new THREE.Vector3(pos.x, pos.y, pos.z));
-					}
-				}
-			}
-		}
-
-		return inBox;
-	}
-
 	get name () {
 		return this.geometryNode.name;
 	}
@@ -232,37 +193,7 @@ export class PointCloudOctree extends PointCloudTree {
 		return node;
 	}
 
-	updateVisibleBounds () {
-		let leafNodes = [];
-		for (let i = 0; i < this.visibleNodes.length; i++) {
-			let node = this.visibleNodes[i];
-			let isLeaf = true;
-
-			for (let j = 0; j < node.children.length; j++) {
-				let child = node.children[j];
-				if (child instanceof PointCloudOctreeNode) {
-					isLeaf = isLeaf && !child.sceneNode.visible;
-				} else if (child instanceof PointCloudOctreeGeometryNode) {
-					isLeaf = true;
-				}
-			}
-
-			if (isLeaf) {
-				leafNodes.push(node);
-			}
-		}
-
-		this.visibleBounds.min = new THREE.Vector3(Infinity, Infinity, Infinity);
-		this.visibleBounds.max = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
-		for (let i = 0; i < leafNodes.length; i++) {
-			let node = leafNodes[i];
-
-			this.visibleBounds.expandByPoint(node.getBoundingBox().min);
-			this.visibleBounds.expandByPoint(node.getBoundingBox().max);
-		}
-	}
-
-	updateMaterial (material, visibleNodes, camera, renderer) {
+	updateMaterial (material, camera, renderer) {
 		material.fov = camera.fov * (Math.PI / 180);
 		material.screenWidth = renderer.domElement.clientWidth;
 		material.screenHeight = renderer.domElement.clientHeight;
@@ -370,39 +301,50 @@ export class PointCloudOctree extends PointCloudTree {
 		let bsWorld = bbWorld.getBoundingSphere(new THREE.Sphere());
 
 		let intersects = false;
+		let points = profile.points;
 
-		for (let i = 0; i < profile.points.length - 1; i++) {
+		for (let i = 0; i < points.length - 1; i++) {
+			let start = points[i];
+			let end = points[i + 1];
 
-			let start = new THREE.Vector3(profile.points[i + 0].x, profile.points[i + 0].y, bsWorld.center.z);
-			let end = new THREE.Vector3(profile.points[i + 1].x, profile.points[i + 1].y, bsWorld.center.z);
+			let center = new THREE.Vector3().addVectors(end, start).multiplyScalar(0.5);
+			let up = profile.up || new THREE.Vector3(0, 0, 1);
 
-			let closest = new THREE.Line3(start, end).closestPointToPoint(bsWorld.center, true, new THREE.Vector3());
-			let distance = closest.distanceTo(bsWorld.center);
+			let length = start.distanceTo(end);
+			let side = new THREE.Vector3().subVectors(end, start).normalize();
+			let forward = new THREE.Vector3().crossVectors(side, up).normalize();
+			let cutPlane = new THREE.Plane().setFromNormalAndCoplanarPoint(forward, start);
+			let halfPlane = new THREE.Plane().setFromNormalAndCoplanarPoint(side, center);
 
-			intersects = intersects || (distance < (bsWorld.radius + profile.width));
+			let distance = 
+				Math.max(
+					Math.abs(cutPlane.distanceToPoint(bsWorld.center)) - bsWorld.radius - profile.width,
+					Math.abs(halfPlane.distanceToPoint(bsWorld.center)) - bsWorld.radius - length
+				)
+
+			if (distance < 0) return true;
 		}
 
-		//console.log(`${node.name}: ${intersects}`);
-
-		return intersects;
+		return false;
 	}
 
-	nodesOnRay (nodes, ray) {
-		let nodesOnRay = [];
+	nodesOnRay (nodes, ray, camera) {
+		let sphere = new THREE.Sphere();
 
-		let _ray = ray.clone();
-		for (let i = 0; i < nodes.length; i++) {
-			let node = nodes[i];
-			// let inverseWorld = new THREE.Matrix4().getInverse(node.matrixWorld);
-			// let sphere = node.getBoundingSphere().clone().applyMatrix4(node.sceneNode.matrixWorld);
-			let sphere = node.getBoundingSphere().clone().applyMatrix4(this.matrixWorld);
+		let walk = node => {
+			if (!node || !node.geometry) return;
+			node.geometry.boundingBox.getBoundingSphere(sphere).applyMatrix4(this.matrixWorld);
 
-			if (_ray.intersectsSphere(sphere)) {
-				nodesOnRay.push(node);
+			if (ray.intersectsSphere(sphere)) {
+				nodes.push(node);
+
+				for (let i = 0; i < 8; i++) walk(node.children[i]);	
 			}
 		}
 
-		return nodesOnRay;
+		for (let i = 0; i < this.children.length; i++){
+			walk(this.children[i]);
+		}
 	}
 
 	updateMatrixWorld (force) {
@@ -572,6 +514,101 @@ export class PointCloudOctree extends PointCloudTree {
 		return points;
 	}
 
+	async getPointsInBox(mat, projector){
+		let points = []
+
+		let worldToBox;
+
+		let p1size, p2size, p3size;
+		let plane1, plane2, plane3;
+
+		{
+			let p = projector.projectTo(this.projection);
+
+			try {
+				let origin = p(Math.vec3(0).multiply(mat));
+				let x = p(Math.vec3(1, 0, 0).multiply(mat)).subtract(origin);
+				let y = p(Math.vec3(0, 1, 0).multiply(mat)).subtract(origin);
+				let z = p(Math.vec3(0, 0, 1).multiply(mat)).subtract(origin);
+				
+				mat = Math.mat4(x, 0, y, 0, z, 0, origin, 1);
+
+				p1size = x.len();
+				p2size = y.len();
+				p3size = z.len();
+
+				plane1 = new THREE.Plane().setFromNormalAndCoplanarPoint(x.normalize().threeAlias(), origin.threeAlias())
+				plane2 = new THREE.Plane().setFromNormalAndCoplanarPoint(y.normalize().threeAlias(), origin.threeAlias())
+				plane3 = new THREE.Plane().setFromNormalAndCoplanarPoint(z.normalize().threeAlias(), origin.threeAlias())
+			}catch (e){}
+
+			worldToBox = new THREE.Matrix4().set(...mat.invert().transpose());
+		}
+
+		let projectBack = projector.projectFrom(this.projection);
+		let root = this.pcoGeometry.root.geometry.attributes;
+		
+		let checkPoints = (position, bb, size) => {
+			let pos = new THREE.Vector4();
+			for (let i = 0; i < position.length; i += 3){
+				let x = position[i + 0] * size[0] + bb.min.x;
+				let y = position[i + 1] * size[1] + bb.min.y;
+				let z = position[i + 2] * size[2] + bb.min.z;
+
+				pos.set(x, y, z, 1);
+				pos.applyMatrix4(worldToBox);
+				
+				if(-0.5 < pos.x && pos.x < 0.5){
+					if(-0.5 < pos.y && pos.y < 0.5){
+						if(-0.5 < pos.z && pos.z < 0.5){
+							let p = projectBack(Math.vec3(x, y, z));
+
+							points.push(...p);
+						}
+					}
+				}
+			}
+		}
+
+		let process = async root => {
+			await root.load();
+			
+			let bb = root.boundingBox;
+			let size = [bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z];
+
+			for (let i = 0; i < 8; i++){
+				let child = root.children[i];
+
+				if (child){
+					let bsWorld = child.boundingSphere;
+
+					let distance = Math.max(
+						Math.abs(plane1.distanceToPoint(bsWorld.center)) - bsWorld.radius - p1size,
+						Math.abs(plane2.distanceToPoint(bsWorld.center)) - bsWorld.radius - p2size,
+						Math.abs(plane3.distanceToPoint(bsWorld.center)) - bsWorld.radius - p3size
+					)
+					
+					if (distance >= 0) child = null;
+				}
+
+				if (child){
+					await process(child);
+				}else{
+					let index = (i & 2) | ((i & 1) << 2) | ((i & 4) >> 2);
+					let start = 0;
+					for (let ii = 0; ii < index; ii++) start += root.pointCounts[ii];
+
+					start *= 3;
+					
+					checkPoints(root.geometry.attributes.position.array.subarray(start, start + root.pointCounts[index] * 3), bb, size);
+				}
+			}
+		}
+
+		await process (this.pcoGeometry.root);
+		return points;
+	}
+
 	/**
 	 * returns points inside the given profile bounds.
 	 *
@@ -604,7 +641,6 @@ export class PointCloudOctree extends PointCloudTree {
 	 *
 	 */
 	pick(viewer, camera, ray, params = {}){
-
 		let renderer = viewer.renderer;
 		let pRenderer = viewer.pRenderer;
 
@@ -615,8 +651,6 @@ export class PointCloudOctree extends PointCloudTree {
 		let pickWindowSize = getVal(params.pickWindowSize, 17);
 		let pickOutsideClipRegion = getVal(params.pickOutsideClipRegion, false);
 
-		pickWindowSize = 65;
-
 		let size = renderer.getSize();
 
 		let width = Math.ceil(getVal(params.width, size.width));
@@ -625,7 +659,18 @@ export class PointCloudOctree extends PointCloudTree {
 		let pointSizeType = getVal(params.pointSizeType, this.material.pointSizeType);
 		let pointSize = getVal(params.pointSize, this.material.size);
 
-		let nodes = this.nodesOnRay(this.visibleNodes, ray);
+		let nodes = [];
+		//reproject ray to local projection system
+		if (camera && camera.controls){
+			let pointTo = camera.controls.project(this.projection, ray.direction.multiplyScalar(100).add(ray.origin));
+			let origin = camera.controls.project(this.projection, ray.origin);
+			pointTo.subtract(origin).normalize();
+
+			ray.origin = new THREE.Vector3(origin.x, origin.y, origin.z);
+			ray.direction = new THREE.Vector3(pointTo.x, pointTo.y, pointTo.z);
+		}
+
+		this.nodesOnRay(nodes, ray, camera);
 
 		if (nodes.length === 0) {
 			return null;
@@ -679,7 +724,7 @@ export class PointCloudOctree extends PointCloudTree {
 				pickMaterial.clipBoxes = [];
 			}
 
-			this.updateMaterial(pickMaterial, nodes, camera, renderer);
+			this.updateMaterial(pickMaterial, camera, renderer);
 		}
 
 		//pickMaterial.pointColorType = Potree.PointColorType.LOD;
@@ -708,7 +753,7 @@ export class PointCloudOctree extends PointCloudTree {
 			let tmp = this.material;
 			this.material = pickMaterial;
 
-			pRenderer.renderOctree(this, nodes, camera, pickState.renderTarget);
+			pRenderer.renderOctree(this, camera, pickState.renderTarget, {nodeList: nodes});
 
 			this.material = tmp;
 		}
@@ -770,27 +815,27 @@ export class PointCloudOctree extends PointCloudTree {
 		}
 
 		// DEBUG: show panel with pick image
-		//{
-		//	let img = Utils.pixelsArrayToImage(buffer, w, h);
-		//	let screenshot = img.src;
-		//
-		//	if(!this.debugDIV){
-		//		this.debugDIV = $(`
-		//			<div id="pickDebug"
-		//			style="position: absolute;
-		//			right: 400px; width: 300px;
-		//			bottom: 44px; width: 300px;
-		//			z-index: 1000;
-		//			"></div>`);
-		//		$(document.body).append(this.debugDIV);
-		//	}
-		//
-		//	this.debugDIV.empty();
-		//	this.debugDIV.append($(`<img src="${screenshot}"
-		//		style="transform: scaleY(-1); width: 300px"/>`));
-		//	//$(this.debugWindow.document).append($(`<img src="${screenshot}"/>`));
-		//	//this.debugWindow.document.write('<img src="'+screenshot+'"/>');
-		//}
+		/*{
+			let img = Utils.pixelsArrayToImage(buffer, w, h);
+			let screenshot = img.src;
+		
+			if(!this.debugDIV){
+				this.debugDIV = $(`
+					<div id="pickDebug"
+					style="position: absolute;
+					right: 400px; width: 300px;
+					bottom: 44px; width: 300px;
+					z-index: 1000;
+					"></div>`);
+				$(document.body).append(this.debugDIV);
+			}
+		
+			this.debugDIV.empty();
+			this.debugDIV.append($(`<img src="${screenshot}"
+				style="transform: scaleY(-1); width: 300px"/>`));
+			//$(this.debugWindow.document).append($(`<img src="${screenshot}"/>`));
+			//this.debugWindow.document.write('<img src="'+screenshot+'"/>');
+		}*/
 
 
 		for(let hit of hits){
@@ -801,19 +846,31 @@ export class PointCloudOctree extends PointCloudTree {
 			}
 
 			let node = nodes[hit.pcIndex];
-			let pc = node.sceneNode;
-			let geometry = node.geometryNode.geometry;
+			let geometry = node.geometry;
 
 			for(let attributeName in geometry.attributes){
 				let attribute = geometry.attributes[attributeName];
 
+				let bb = geometry.boundingBox;
+
+				let size = [bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z];
+
 				if (attributeName === 'position') {
-					let x = attribute.array[3 * hit.pIndex + 0];
-					let y = attribute.array[3 * hit.pIndex + 1];
-					let z = attribute.array[3 * hit.pIndex + 2];
+					let x = attribute.array[3 * hit.pIndex + 0] * size[0];
+					let y = attribute.array[3 * hit.pIndex + 1] * size[1];
+					let z = attribute.array[3 * hit.pIndex + 2] * size[2];
 
 					let position = new THREE.Vector3(x, y, z);
-					position.applyMatrix4(pc.matrixWorld);
+					position.applyMatrix4(node.matrixWorld);
+
+					//project back to global coordinates
+					if (camera.controls) {
+						let pos = camera.controls.unproject(this.projection, position);
+
+						position.x = pos.x;
+						position.y = pos.y;
+						position.z = pos.z;
+					}
 
 					point[attributeName] = position;
 				} else if (attributeName === 'indices') {
@@ -821,7 +878,7 @@ export class PointCloudOctree extends PointCloudTree {
 				} else if (attributeName === 'gpsTime') {
 					let values = attribute.array.slice(attribute.itemSize * hit.pIndex, attribute.itemSize * (hit.pIndex + 1)) ;
 
-					values[0] += node.geometryNode.gpsTime.offset;
+					values[0] += node.gpsTime.offset;
 
 					point[attributeName] = values;
 				} else {
@@ -999,13 +1056,10 @@ export class PointCloudOctree extends PointCloudTree {
 	}
 
 	set visible(value){
-
-		if(value !== this._visible){
-			this._visible = value;
-
+		if (value !== this._visible){
 			this.dispatchEvent({type: 'visibility_changed', pointcloud: this});
 		}
-
+		this._visible = value;
 	}
 
 }

@@ -1,6 +1,3 @@
-
-import {OrbitControls} from "../navigation/OrbitControls.js";
-
 export class View{
 	constructor () {
 		this.position = new THREE.Vector3(0, 0, 0);
@@ -11,8 +8,6 @@ export class View{
 
 		this.maxPitch = Math.PI / 2;
 		this.minPitch = -Math.PI / 2;
-
-		this.navigationMode = OrbitControls;
 	}
 
 	clone () {
@@ -22,7 +17,6 @@ export class View{
 		c.radius = this.radius;
 		c.maxPitch = this.maxPitch;
 		c.minPitch = this.minPitch;
-		c.navigationMode = this.navigationMode;
 
 		return c;
 	}
@@ -36,7 +30,7 @@ export class View{
 	}
 
 	get direction () {
-		let dir = new THREE.Vector3(0, 1, 0);
+		let dir = this.up || new THREE.Vector3(0, 1, 0);
 
 		dir.applyAxisAngle(new THREE.Vector3(1, 0, 0), this.pitch);
 		dir.applyAxisAngle(new THREE.Vector3(0, 0, 1), this.yaw);
@@ -86,7 +80,7 @@ export class View{
 	}
 
 	pan (x, y) {
-		let dir = new THREE.Vector3(0, 1, 0);
+		let dir = this.up || new THREE.Vector3(0, 1, 0);
 		dir.applyAxisAngle(new THREE.Vector3(1, 0, 0), this.pitch);
 		dir.applyAxisAngle(new THREE.Vector3(0, 0, 1), this.yaw);
 
@@ -104,7 +98,7 @@ export class View{
 	}
 
 	translate (x, y, z) {
-		let dir = new THREE.Vector3(0, 1, 0);
+		let dir = this.up || new THREE.Vector3(0, 1, 0);
 		dir.applyAxisAngle(new THREE.Vector3(1, 0, 0), this.pitch);
 		dir.applyAxisAngle(new THREE.Vector3(0, 0, 1), this.yaw);
 

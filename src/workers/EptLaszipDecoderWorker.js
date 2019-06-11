@@ -1,38 +1,50 @@
-function readUsingDataView(event) {
+import LASDecoder from '../loader/las/LASDecoder';
+
+let constructors = {
+	'position': Float32Array,
+	'color': Uint8Array,
+	'intensity': Float32Array,
+	'classification': Uint8Array,
+	'returnNumber': Uint8Array,
+	'numberOfReturns': Uint8Array,
+	'pointSourceID': Uint16Array
+}
+
+let strides = {
+	'position': 3,
+	'color': 4,
+	'intensity': 1,
+	'classification': 1,
+	'returnNumber': 1,
+	'numberOfReturns': 1,
+	'pointSourceID': 1
+}
+
+const Buffer = (typeof SharedArrayBuffer == 'undefined') ? ArrayBuffer : SharedArrayBuffer;
+
+async function readUsingDataView(event) {
 	performance.mark("laslaz-start");
 
-	let buffer = event.data.buffer;
-	let numPoints = event.data.numPoints;
-	let pointSize = event.data.pointSize;
-	let pointFormat = event.data.pointFormatID;
-	let scale = event.data.scale;
-	let offset = event.data.offset;
+	let req = await fetch (event.data.url);
+	let decoder = new LASDecoder(await req.arrayBuffer());
 
-	let sourceUint8 = new Uint8Array(buffer);
-	let sourceView = new DataView(buffer);
+	let sourceUint8 = await decoder.readPoints();
+	let sourceView = new DataView(sourceUint8.buffer, sourceUint8.byteOffset, sourceUint8.byteLength);
 
-	let tightBoundingBox = {
-		min: [
-			Number.POSITIVE_INFINITY,
-			Number.POSITIVE_INFINITY,
-			Number.POSITIVE_INFINITY
-		],
-		max: [
-			Number.NEGATIVE_INFINITY,
-			Number.NEGATIVE_INFINITY,
-			Number.NEGATIVE_INFINITY
-		]
-	};
+	let numPoints = decoder.header.numPoints;
+	let pointSize = decoder.header.dataStride;
+	let pointFormat = decoder.header.dataFormat;
+	let scale = decoder.header.pointScale;
+	let offset = decoder.header.pointOffset;
+	let mins = decoder.header.bounds.min;
 
-	let mean = [0, 0, 0];
-
-	let pBuff = new ArrayBuffer(numPoints * 3 * 4);
-	let cBuff = new ArrayBuffer(numPoints * 4);
-	let iBuff = new ArrayBuffer(numPoints * 4);
-	let clBuff = new ArrayBuffer(numPoints);
-	let rnBuff = new ArrayBuffer(numPoints);
-	let nrBuff = new ArrayBuffer(numPoints);
-	let psBuff = new ArrayBuffer(numPoints * 2);
+	let pBuff = new Buffer(numPoints * 3 * 4);
+	let cBuff = new Buffer(numPoints * 4);
+	let iBuff = new Buffer(numPoints * 4);
+	let clBuff = new Buffer(numPoints);
+	let rnBuff = new Buffer(numPoints);
+	let nrBuff = new Buffer(numPoints);
+	let psBuff = new Buffer(numPoints * 2);
 
 	let positions = new Float32Array(pBuff);
 	let colors = new Uint8Array(cBuff);
@@ -60,31 +72,17 @@ function readUsingDataView(event) {
 		}
 	}
 
+	let min = event.data.bbmin;
+	let max = event.data.bbmax;
+
+	let size = [max[0] - min[0], max[1] - min[1], max[2] - min[2]].map((e, i) => scale[i] / e);
+	let off = offset.map((e, i) => (e - min[i]) / scale[i]);
+	
 	for (let i = 0; i < numPoints; i++) {
 		// POSITION
-		let ux = sourceView.getInt32(i * pointSize + 0, true);
-		let uy = sourceView.getInt32(i * pointSize + 4, true);
-		let uz = sourceView.getInt32(i * pointSize + 8, true);
-
-		x = ux * scale[0] + offset[0] - event.data.mins[0];
-		y = uy * scale[1] + offset[1] - event.data.mins[1];
-		z = uz * scale[2] + offset[2] - event.data.mins[2];
-
-		positions[3 * i + 0] = x;
-		positions[3 * i + 1] = y;
-		positions[3 * i + 2] = z;
-
-		mean[0] += x / numPoints;
-		mean[1] += y / numPoints;
-		mean[2] += z / numPoints;
-
-		tightBoundingBox.min[0] = Math.min(tightBoundingBox.min[0], x);
-		tightBoundingBox.min[1] = Math.min(tightBoundingBox.min[1], y);
-		tightBoundingBox.min[2] = Math.min(tightBoundingBox.min[2], z);
-
-		tightBoundingBox.max[0] = Math.max(tightBoundingBox.max[0], x);
-		tightBoundingBox.max[1] = Math.max(tightBoundingBox.max[1], y);
-		tightBoundingBox.max[2] = Math.max(tightBoundingBox.max[2], z);
+		positions[3 * i + 0] = (sourceView.getInt32(i * pointSize + 0, true) + off[0]) * size[0];
+		positions[3 * i + 1] = (sourceView.getInt32(i * pointSize + 4, true) + off[1]) * size[1];
+		positions[3 * i + 2] = (sourceView.getInt32(i * pointSize + 8, true) + off[2]) * size[2];
 
 		// INTENSITY
 		let intensity = sourceView.getUint16(i * pointSize + 12, true);
@@ -125,10 +123,150 @@ function readUsingDataView(event) {
 		}
 	}
 
-	let indices = new ArrayBuffer(numPoints * 4);
-	let iIndices = new Uint32Array(indices);
-	for (let i = 0; i < numPoints; i++) {
-		iIndices[i] = i;
+	sourceUint8.free();
+
+	let attributes = {
+		position: positions,
+		color: colors,
+		intensity: intensities,
+		classification: classifications,
+		returnNumber: returnNumbers,
+		numberOfReturns: numberOfReturns,
+		pointSourceID: pointSourceIDs
+	}
+
+	let pointCounts = [0, 0, 0, 0, 0, 0, 0, 0]
+
+	//count all points and sort them into the 8 quadrents
+	{
+		let pos = positions;
+
+		for (let i = 0; i < pos.length; i += 3){
+			pointCounts[(pos[i] >= .5 ? 1 : 0) | (pos[i + 1] >= .5 ? 2 : 0) | (pos[i + 2] >= .5 ? 4 : 0)]++;
+		}
+	}
+
+	if (event.data.parentAttributes){
+		let pos = event.data.parentAttributes.position;
+		let i = event.data.parentIndex;
+
+		if (i < 8){
+			let index = (i & 2) | ((i & 1) << 2) | ((i & 4) >> 2);
+			let count = event.data.pointCounts[index];
+
+			let arrays = [];
+
+			for (let o in attributes){
+				if (!constructors[o]) continue;
+
+				let pnode = event.data.parentAttributes[o];
+				let oarray = attributes[o];
+				let narray = new constructors[o](oarray.length + count * strides[o])
+				narray.set(oarray);
+
+				attributes[o] = narray;
+
+				let obj = {
+					parray: pnode,
+					array: narray,
+					index: oarray.length,
+					stride: strides[o],
+					pos: o == 'position'
+				};
+
+				arrays.push(obj);
+			}
+
+			let xoff = (index & 1) ? -0.5 : 0;
+			let yoff = (index & 2) ? -0.5 : 0;
+			let zoff = (index & 4) ? -0.5 : 0;
+
+			for (let p of arrays){
+				if (p.pos){
+					for (let ii = 0; ii < p.parray.length; ii += 3){
+						p.array[p.index++] = (p.parray[ii + 0] + xoff) * 2
+						p.array[p.index++] = (p.parray[ii + 1] + yoff) * 2
+						p.array[p.index++] = (p.parray[ii + 2] + zoff) * 2
+					}
+				}else{
+					p.array.set(p.parray, p.index)
+				}
+			}
+		}
+	}
+
+	//count all points and sort them into the 8 quadrents
+	{
+		pointCounts.fill(0);
+		let pos = attributes.position;
+
+		for (let i = 0; i < pos.length; i += 3){
+			pointCounts[(pos[i] >= .5 ? 1 : 0) | (pos[i + 1] >= .5 ? 2 : 0) | (pos[i + 2] >= .5 ? 4 : 0)]++;
+		}
+
+		let arrays = [];
+
+		for (let o in attributes){
+			if (o != 'position'){
+				arrays.push({
+					array: new constructors[o](attributes[o].buffer),
+					stride: strides[o]
+				});
+			}
+		}
+
+		let offsets = [0], ooffsets = [];
+		for (let i = 0; i < pointCounts.length; i++){
+			let val = offsets[i] + pointCounts[i];
+			offsets.push(val);
+			ooffsets.push(val);
+		}
+		offsets.pop();
+
+		//sort the points so that points in the same quadrent appear next to each other in memory
+		let current = 0;
+		while (current < 8){
+			if (offsets[current] >= ooffsets[current]){
+				current++;
+				continue;
+			}
+
+			let i3 = offsets[current] * 3;
+
+			let x = pos[i3 + 0];
+			let y = pos[i3 + 1];
+			let z = pos[i3 + 2];
+			let quad = (x >= .5 ? 1 : 0) | (y >= .5 ? 2 : 0) | (z >= .5 ? 4 : 0);
+
+			if (quad != current){
+				{
+					let dest = offsets[quad] * 3;
+
+					pos[i3 + 0] = pos[dest + 0];
+					pos[i3 + 1] = pos[dest + 1];
+					pos[i3 + 2] = pos[dest + 2];
+					pos[dest + 0] = x;
+					pos[dest + 1] = y;
+					pos[dest + 2] = z;
+				}
+
+				for (let i = 0; i < arrays.length; i++){
+					let {array, stride} = arrays[i];
+					
+					let src = offsets[current] * stride;
+					let dest = offsets[quad] * stride;
+
+					for (let ii = 0; ii < stride; ii++){
+						let temp = array[src + ii];
+						array[src + ii] = array[dest + ii];
+						array[dest + ii] = temp;
+					}
+				}
+
+			}
+
+			offsets[quad]++;
+		}
 	}
 
 	performance.mark("laslaz-end");
@@ -143,20 +281,28 @@ function readUsingDataView(event) {
 	performance.clearMarks();
 	performance.clearMeasures();
 
+	let len = attributes.position.length / 3;
+	let indices = new Buffer(len * 4);
+	let iIndices = new Uint32Array(indices);
+	for (let i = 0; i < len; i++) {
+		iIndices[i] = i;
+	}
+
 	let message = {
-		mean: mean,
-		position: pBuff,
-		color: cBuff,
-		intensity: iBuff,
-		classification: clBuff,
-		returnNumber: rnBuff,
-		numberOfReturns: nrBuff,
-		pointSourceID: psBuff,
-		tightBoundingBox: tightBoundingBox,
+		pointCounts,
+		numPoints,
+		mean: [off[0] + .5 / size[0], off[1] + .5 / size[1], off[2] + .5 / size[2]],
+		position: attributes.position.buffer,
+		color: attributes.color.buffer,
+		intensity: attributes.intensity.buffer,
+		classification: attributes.classification.buffer,
+		returnNumber: attributes.returnNumber.buffer,
+		numberOfReturns: attributes.numberOfReturns.buffer,
+		pointSourceID: attributes.pointSourceID.buffer,
 		indices: indices
 	};
 
-	let transferables = [
+	let transferables = Buffer == ArrayBuffer ? [
 		message.position,
 		message.color,
 		message.intensity,
@@ -165,12 +311,20 @@ function readUsingDataView(event) {
 		message.numberOfReturns,
 		message.pointSourceID,
 		message.indices
-	];
+	] : [];
+
 
 	postMessage(message, transferables);
 };
 
 
 
-onmessage = readUsingDataView;
+onmessage = async event => {
+	try {
+		await readUsingDataView(event);
+	}catch (e){
+		console.warn("Failed to decode: " + event.data.url + " due to " + e.toString() + e.stack);
+		postMessage(null);
+	}
+};
 

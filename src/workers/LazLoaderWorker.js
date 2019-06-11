@@ -33,7 +33,7 @@ function parseLASHeader (arraybuffer) {
 	let start = 32 * 3 + 35;
 	o.scale = readAs(arraybuffer, Float64Array, start, 3); start += 24; // 8*3
 	o.offset = readAs(arraybuffer, Float64Array, start, 3); start += 24;
-
+	
 	let bounds = readAs(arraybuffer, Float64Array, start, 6); start += 48; // 8*6;
 	o.maxs = [bounds[0], bounds[2], bounds[4]];
 	o.mins = [bounds[1], bounds[3], bounds[5]];

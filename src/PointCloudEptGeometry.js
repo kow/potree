@@ -157,7 +157,7 @@ export class PointCloudEptGeometryNode extends PointCloudTreeNode {
 
 		// These are set during hierarchy loading.
 		this.hasChildren = false;
-		this.children = { };
+		this.children = [];
 		this.numPoints = -1;
 
 		this.level = this.key.d;
@@ -198,19 +198,9 @@ export class PointCloudEptGeometryNode extends PointCloudTreeNode {
 		child.parent = this;
 	}
 
-	load() {
-		if (this.loaded || this.loading) return;
-		if (Potree.numNodesLoading >= Potree.maxNodesLoading) return;
-
-		this.loading = true;
-		++Potree.numNodesLoading;
-
-		if (this.numPoints == -1) this.loadHierarchy();
-		this.loadPoints();
-	}
-
-	loadPoints(){
-		this.ept.loader.load(this);
+	async loadPoints(){
+		if (this.numPoints == -1) await this.loadHierarchy();
+		return await this.ept.loader.load(this);
 	}
 
 	async loadHierarchy() {
@@ -270,9 +260,6 @@ export class PointCloudEptGeometryNode extends PointCloudTreeNode {
 		this.tightBoundingBox = tightBoundingBox;
 		this.numPoints = np;
 		this.mean = mean;
-		this.loaded = true;
-		this.loading = false;
-		--Potree.numNodesLoading;
 	}
 
 	toPotreeName(d, x, y, z) {
@@ -306,6 +293,8 @@ export class PointCloudEptGeometryNode extends PointCloudTreeNode {
 			}
 			this.oneTimeDisposeHandlers = [];
 		}
+
+		if (this.webglBuffer) this.webglBuffer.dispose();
 	}
 }
 

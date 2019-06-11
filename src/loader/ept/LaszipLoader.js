@@ -9,161 +9,94 @@ import {XHRFactory} from "../../XHRFactory.js";
  *
  */
 
+let constructors = {
+	'position': Float32Array,
+	'color': Uint8Array,
+	'intensity': Float32Array,
+	'classification': Uint8Array,
+	'returnNumber': Uint8Array,
+	'numberOfReturns': Uint8Array,
+	'pointSourceID': Uint16Array,
+	'indices': Uint8Array
+}
+
+let strides = {
+	'position': 3,
+	'color': 4,
+	'intensity': 1,
+	'classification': 1,
+	'returnNumber': 1,
+	'numberOfReturns': 1,
+	'pointSourceID': 1,
+	'indices': 4
+}
+
 export class EptLaszipLoader {
-	load(node) {
+	async load(node) {
 		if (node.loaded) return;
 
 		let url = node.url() + '.laz';
 
-		let xhr = XHRFactory.createXMLHttpRequest();
-		xhr.open('GET', url, true);
-		xhr.responseType = 'arraybuffer';
-		xhr.overrideMimeType('text/plain; charset=x-user-defined');
-		xhr.onreadystatechange = () => {
-			if (xhr.readyState === 4) {
-				if (xhr.status === 200) {
-					let buffer = xhr.response;
-					this.parse(node, buffer);
-				} else {
-					console.log('Failed ' + url + ': ' + xhr.status);
-				}
-			}
-		};
-
-		xhr.send(null);
+		await this.parse(node, url);
 	}
 
-	parse(node, buffer){
-		let lf = new LASFile(buffer);
-		let handler = new EptLazBatcher(node);
-
-		lf.open()
-		.then(() => {
-			lf.isOpen = true;
-			return lf.getHeader();
-		})
-		.then((header) => {
-			let i = 0;
-			let np = header.pointsCount;
-
-			let toArray = (v) => [v.x, v.y, v.z];
-			let mins = toArray(node.key.b.min);
-			let maxs = toArray(node.key.b.max);
-
-			let read = () => {
-				let p = lf.readData(1000000, 0, 1);
-				return p.then(function (data) {
-					let d = new LASDecoder(
-							data.buffer,
-							header.pointsFormatId,
-							header.pointsStructSize,
-							data.count,
-							header.scale,
-							header.offset,
-							mins,
-							maxs);
-					d.extraBytes = header.extraBytes;
-					d.pointsFormatId = header.pointsFormatId;
-					handler.push(d);
-
-					i += data.count;
-
-					if (data.hasMoreData) {
-						return read();
-					}
-					else {
-						header.totalRead = i;
-						header.versionAsString = lf.versionAsString;
-						header.isCompressed = lf.isCompressed;
-						return null;
-					}
-				});
-			};
-
-			return read();
-		})
-		.then(() => lf.close())
-		.then(() => lf.isOpen = false)
-		.catch((err) => {
-			console.log('Error reading LAZ:', err);
-			if (lf.isOpen) {
-				lf.close().then(() => {
-					lf.isOpen = false;
-					throw err;
-				});
-			}
-			else throw err;
-		});
-	}
-};
-
-export class EptLazBatcher {
-	constructor(node) { this.node = node; }
-
-	push(las) {
-		let workerPath = Potree.scriptPath +
-			'/workers/EptLaszipDecoderWorker.js';
-		let worker = Potree.workerPool.getWorker(workerPath);
-
-		worker.onmessage = (e) => {
-			let g = new THREE.BufferGeometry();
-			let numPoints = las.pointsCount;
-
-			let positions = new Float32Array(e.data.position);
-			let colors = new Uint8Array(e.data.color);
-
-			let intensities = new Float32Array(e.data.intensity);
-			let classifications = new Uint8Array(e.data.classification);
-			let returnNumbers = new Uint8Array(e.data.returnNumber);
-			let numberOfReturns = new Uint8Array(e.data.numberOfReturns);
-			let pointSourceIDs = new Uint16Array(e.data.pointSourceID);
-			let indices = new Uint8Array(e.data.indices);
-
-			g.addAttribute('position',
-					new THREE.BufferAttribute(positions, 3));
-			g.addAttribute('color',
-					new THREE.BufferAttribute(colors, 4, true));
-			g.addAttribute('intensity',
-					new THREE.BufferAttribute(intensities, 1));
-			g.addAttribute('classification',
-					new THREE.BufferAttribute(classifications, 1));
-			g.addAttribute('returnNumber',
-					new THREE.BufferAttribute(returnNumbers, 1));
-			g.addAttribute('numberOfReturns',
-					new THREE.BufferAttribute(numberOfReturns, 1));
-			g.addAttribute('pointSourceID',
-					new THREE.BufferAttribute(pointSourceIDs, 1));
-			g.addAttribute('indices',
-					new THREE.BufferAttribute(indices, 4));
-
-			g.attributes.indices.normalized = true;
-
-			let tightBoundingBox = new THREE.Box3(
-				new THREE.Vector3().fromArray(e.data.tightBoundingBox.min),
-				new THREE.Vector3().fromArray(e.data.tightBoundingBox.max)
-			);
-
-			this.node.doneLoading(
-					g,
-					tightBoundingBox,
-					numPoints,
-					new THREE.Vector3(...e.data.mean));
-
-			Potree.workerPool.returnWorker(workerPath, worker);
-		};
+	async parse(node, url){
+		let min = node.boundingBox.min;
+		let max = node.boundingBox.max;
 
 		let message = {
-			buffer: las.arrayb,
-			numPoints: las.pointsCount,
-			pointSize: las.pointSize,
-			pointFormatID: las.pointsFormatId,
-			scale: las.scale,
-			offset: las.offset,
-			mins: las.mins,
-			maxs: las.maxs
+			url,
+			bbmin: [min.x, min.y, min.z],
+			bbmax: [max.x, max.y, max.z],
 		};
 
-		worker.postMessage(message, [message.buffer]);
-	};
-};
+		let parent = node.parent;
 
+		if (parent && parent.geometry){
+			let i = 0;
+			for (i = 0; i < 8; i++) if (parent.children[i] == node) break;
+			let index = (i & 2) | ((i & 1) << 2) | ((i & 4) >> 2);
+
+			message.parentIndex = i;
+			message.parentAttributes = {}
+			message.pointCounts = node.parent.pointCounts
+
+			let count = node.parent.pointCounts[index];
+			let off = 0;
+			for (let ii = 0; ii < index; ii++) off += node.parent.pointCounts[ii];
+
+			for (let o in parent.geometry.attributes){
+				if (o == 'indices') continue;
+
+				message.parentAttributes[o] = parent.geometry.attributes[o].array.subarray(off * strides[o], (off + count) * strides[o]);
+			}
+		}
+
+		let e = await Potree.workerPool.job(Potree.scriptPath + '/workers/EptLaszipDecoderWorker.js', message);
+
+		if (!e.data) return;
+
+		let g = new THREE.BufferGeometry();
+		for (let o in e.data){
+			if (!constructors[o]) continue;
+
+			g.addAttribute(o, new THREE.BufferAttribute(new constructors[o](e.data[o]), strides[o]))
+		}
+
+		g.attributes.indices.normalized = true;
+		g.attributes.color.normalized = true;
+
+		let tightBoundingBox = new THREE.Box3(
+			new THREE.Vector3(0, 0, 0),
+			new THREE.Vector3(1, 1, 1)
+		);
+
+		node.pointCounts = e.data.pointCounts;
+
+		node.doneLoading(
+				g,
+				tightBoundingBox,
+				e.data.numPoints,
+				new THREE.Vector3(...e.data.mean));
+	}
+}

@@ -15,6 +15,7 @@ attribute float pointSourceID;
 attribute vec4 indices;
 attribute float spacing;
 attribute float gpsTime;
+attribute float storeLevel;
 
 uniform mat4 modelMatrix;
 uniform mat4 modelViewMatrix;
@@ -22,13 +23,16 @@ uniform mat4 projectionMatrix;
 uniform mat4 viewMatrix;
 uniform mat4 uViewInv;
 
+uniform float setChildren;
+
+uniform float nodeLevel;
+
 uniform float uScreenWidth;
 uniform float uScreenHeight;
 uniform float fov;
 uniform float near;
 uniform float far;
-
-uniform bool uDebug;
+uniform float nearPlaneHeight;
 
 uniform bool uUseOrthographicCamera;
 uniform float uOrthoWidth;
@@ -59,6 +63,10 @@ uniform int clipMethod;
 	uniform mat4 uClipPolygonWVP[num_clippolygons];
 #endif
 
+#if defined (clip_classification)
+	uniform float classificationFilters[clip_classification];
+#endif
+
 
 uniform float size;
 uniform float minSize;
@@ -70,11 +78,11 @@ uniform float uNodeSpacing;
 uniform float uOctreeSize;
 uniform vec3 uBBSize;
 uniform float uLevel;
-uniform float uVNStart;
-uniform bool uIsLeafNode;
 
 uniform vec3 uColor;
 uniform float uOpacity;
+
+varying vec2 logDepth;
 
 uniform vec2 elevationRange;
 uniform vec2 intensityRange;
@@ -92,12 +100,8 @@ uniform float rgbGamma;
 uniform float rgbContrast;
 uniform float rgbBrightness;
 uniform float uTransition;
-uniform float wRGB;
-uniform float wIntensity;
-uniform float wElevation;
-uniform float wClassification;
-uniform float wReturnNumber;
-uniform float wSourceID;
+
+uniform float colorWeights[16];
 
 uniform vec3 uShadowColor;
 
@@ -111,7 +115,7 @@ uniform mat4 uShadowWorldView[num_shadowmaps];
 uniform mat4 uShadowProj[num_shadowmaps];
 #endif
 
-varying vec3	vColor;
+varying vec4	vColor;
 varying float	vLogDepth;
 varying vec3	vViewPosition;
 varying float 	vRadius;
@@ -130,172 +134,25 @@ float round(float number){
 // ######### ##     ## ######### ##           ##     ##   ##   ##  ##                ##  ##    ##     ##             ## 
 // ##     ## ##     ## ##     ## ##           ##     ##    ## ##   ##          ##    ##  ##   ##      ##       ##    ## 
 // ##     ## ########  ##     ## ##           ##    ####    ###    ########     ######  #### ######## ########  ######  
-// 																			
-
-
-// ---------------------
-// OCTREE
-// ---------------------
-
-#if (defined(adaptive_point_size) || defined(color_type_lod)) && defined(tree_type_octree)
-/**
- * number of 1-bits up to inclusive index position
- * number is treated as if it were an integer in the range 0-255
- *
- */
-int numberOfOnes(int number, int index){
-	int numOnes = 0;
-	int tmp = 128;
-	for(int i = 7; i >= 0; i--){
-		
-		if(number >= tmp){
-			number = number - tmp;
-
-			if(i <= index){
-				numOnes++;
-			}
-		}
-		
-		tmp = tmp / 2;
-	}
-
-	return numOnes;
-}
-
-
-/**
- * checks whether the bit at index is 1
- * number is treated as if it were an integer in the range 0-255
- *
- */
-bool isBitSet(int number, int index){
-
-	// weird multi else if due to lack of proper array, int and bitwise support in WebGL 1.0
-	int powi = 1;
-	if(index == 0){
-		powi = 1;
-	}else if(index == 1){
-		powi = 2;
-	}else if(index == 2){
-		powi = 4;
-	}else if(index == 3){
-		powi = 8;
-	}else if(index == 4){
-		powi = 16;
-	}else if(index == 5){
-		powi = 32;
-	}else if(index == 6){
-		powi = 64;
-	}else if(index == 7){
-		powi = 128;
-	}else{
-		return false;
-	}
-
-	int ndp = number / powi;
-
-	return mod(float(ndp), 2.0) != 0.0;
-}
-
-
-/**
- * find the LOD at the point position
- */
+//
+																	
 float getLOD(){
-	
-	vec3 offset = vec3(0.0, 0.0, 0.0);
-	int iOffset = int(uVNStart);
-	float depth = uLevel;
-	for(float i = 0.0; i <= 30.0; i++){
-		float nodeSizeAtLevel = uOctreeSize  / pow(2.0, i + uLevel + 0.0);
-		
-		vec3 index3d = (position-offset) / nodeSizeAtLevel;
-		index3d = floor(index3d + 0.5);
-		int index = int(round(4.0 * index3d.x + 2.0 * index3d.y + index3d.z));
-		
-		vec4 value = texture2D(visibleNodes, vec2(float(iOffset) / 2048.0, 0.0));
-		int mask = int(round(value.r * 255.0));
-
-		if(isBitSet(mask, index)){
-			// there are more visible child nodes at this position
-			int advanceG = int(round(value.g * 255.0)) * 256;
-			int advanceB = int(round(value.b * 255.0));
-			int advanceChild = numberOfOnes(mask, index - 1);
-			int advance = advanceG + advanceB + advanceChild;
-
-			iOffset = iOffset + advance;
-			
-			depth++;
-		}else{
-			// no more visible child nodes at this position
-			return value.a * 255.0;
-			//return depth;
-		}
-		
-		offset = offset + (vec3(1.0, 1.0, 1.0) * nodeSizeAtLevel * 0.5) * index3d;
-	}
-		
-	return depth;
+	return uLevel;
 }
 
 float getSpacing(){
-	vec3 offset = vec3(0.0, 0.0, 0.0);
-	int iOffset = int(uVNStart);
-	float depth = uLevel;
-	float spacing = uNodeSpacing;
-	for(float i = 0.0; i <= 30.0; i++){
-		float nodeSizeAtLevel = uOctreeSize  / pow(2.0, i + uLevel + 0.0);
-		
-		vec3 index3d = (position-offset) / nodeSizeAtLevel;
-		index3d = floor(index3d + 0.5);
-		int index = int(round(4.0 * index3d.x + 2.0 * index3d.y + index3d.z));
-		
-		vec4 value = texture2D(visibleNodes, vec2(float(iOffset) / 2048.0, 0.0));
-		int mask = int(round(value.r * 255.0));
-		float spacingFactor = value.a;
-
-		if(i > 0.0){
-			spacing = spacing / (255.0 * spacingFactor);
-		}
-		
-
-		if(isBitSet(mask, index)){
-			// there are more visible child nodes at this position
-			int advanceG = int(round(value.g * 255.0)) * 256;
-			int advanceB = int(round(value.b * 255.0));
-			int advanceChild = numberOfOnes(mask, index - 1);
-			int advance = advanceG + advanceB + advanceChild;
-
-			iOffset = iOffset + advance;
-
-			//spacing = spacing / (255.0 * spacingFactor);
-			//spacing = spacing / 3.0;
-			
-			depth++;
-		}else{
-			// no more visible child nodes at this position
-			return spacing;
-		}
-		
-		offset = offset + (vec3(1.0, 1.0, 1.0) * nodeSizeAtLevel * 0.5) * index3d;
-	}
-		
-	return spacing;
+	return uNodeSpacing;
 }
 
 float getPointSizeAttenuation(){
 	return pow(2.0, getLOD());
 }
 
-
-#endif
-
-
 // ---------------------
 // KD-TREE
 // ---------------------
 
-#if (defined(adaptive_point_size) || defined(color_type_lod)) && defined(tree_type_kdtree)
+#if (defined(adaptive_point_size) || defined(color_weight_lod)) && defined(tree_type_kdtree)
 
 float getLOD(){
 	vec3 offset = vec3(0.0, 0.0, 0.0);
@@ -369,7 +226,7 @@ float getPointSizeAttenuation(){
 // ##     ##    ##       ##    ########   ##  ########  ##     ##    ##    ######    ######  
 // #########    ##       ##    ##   ##    ##  ##     ## ##     ##    ##    ##             ## 
 // ##     ##    ##       ##    ##    ##   ##  ##     ## ##     ##    ##    ##       ##    ## 
-// ##     ##    ##       ##    ##     ## #### ########   #######     ##    ########  ######                                                                               
+// ##     ##    ##       ##    ##     ## #### ########   #######     ##    ########  ######
 // 
 
 
@@ -445,39 +302,6 @@ vec3 getSourceID(){
 	return texture2D(gradient, vec2(w,1.0 - w)).rgb;
 }
 
-vec3 getCompositeColor(){
-	vec3 c;
-	float w;
-
-	c += wRGB * getRGB();
-	w += wRGB;
-	
-	c += wIntensity * getIntensity() * vec3(1.0, 1.0, 1.0);
-	w += wIntensity;
-	
-	c += wElevation * getElevation();
-	w += wElevation;
-	
-	c += wReturnNumber * getReturnNumber();
-	w += wReturnNumber;
-	
-	c += wSourceID * getSourceID();
-	w += wSourceID;
-	
-	vec4 cl = wClassification * getClassification();
-    c += cl.a * cl.rgb;
-	w += wClassification * cl.a;
-
-	c = c / w;
-	
-	if(w == 0.0){
-		//c = color;
-		gl_Position = vec4(100.0, 100.0, 100.0, 0.0);
-	}
-	
-	return c;
-}
-
 
 // 
 //  ######  ##       #### ########  ########  #### ##    ##  ######   
@@ -491,50 +315,66 @@ vec3 getCompositeColor(){
 
 
 
-vec3 getColor(){
-	vec3 color;
+vec4 getColor(){
+	vec4 color = vec4(uColor, uOpacity);
 	
-	#ifdef color_type_rgb
-		color = getRGB();
-	#elif defined color_type_height
-		color = getElevation();
-	#elif defined color_type_rgb_height
-		vec3 cHeight = getElevation();
-		color = (1.0 - uTransition) * getRGB() + uTransition * cHeight;
-	#elif defined color_type_depth
-		float linearDepth = gl_Position.w;
-		float expDepth = (gl_Position.z / gl_Position.w) * 0.5 + 0.5;
-		color = vec3(linearDepth, expDepth, 0.0);
-	#elif defined color_type_intensity
+	#ifdef color_weight_rgb
+		color.xyz += getRGB() * colorWeights[color_weight_rgb];
+	#endif
+
+	#ifdef color_weight_height
+		color.xyz += getElevation() * colorWeights[color_weight_height];
+	#endif
+
+	#ifdef color_weight_rgb_height
+		color.xyz += ((1.0 - uTransition) * getRGB() + uTransition) * colorWeights[color_weight_rgb_height];
+	#endif
+
+	#ifdef color_weight_depth
+		color.xyz += vec3(gl_Position.w, (gl_Position.z / gl_Position.w) * 0.5 + 0.5, 0.0) * colorWeights[color_weight_depth];
+	#endif
+
+	#ifdef color_weight_intensity
+		color.xyz += vec3(getIntensity() * colorWeights[color_weight_intensity]);
+	#endif
+
+	#ifdef color_weight_gpstime
+		color.xyz += vec3(getGpsTime() * colorWeights[color_weight_gpstime]);
+	#endif
+
+	#ifdef color_weight_intensity_gradient
+	{
 		float w = getIntensity();
-		color = vec3(w, w, w);
-	#elif defined color_type_gpstime
-		float w = getGpsTime();
-		color = vec3(w, w, w);
-	#elif defined color_type_intensity_gradient
-		float w = getIntensity();
-		color = texture2D(gradient, vec2(w,1.0-w)).rgb;
-	#elif defined color_type_color
-		color = uColor;
-	#elif defined color_type_lod
+		color.xyz += texture2D(gradient, vec2(w,1.0-w)).rgb * colorWeights[color_weight_intensity_gradient];
+	}
+	#endif
+
+	#ifdef color_weight_lod
+	{
 		float depth = getLOD();
 		float w = depth / 10.0;
-		color = texture2D(gradient, vec2(w,1.0-w)).rgb;
-	#elif defined color_type_point_index
-		color = indices.rgb;
-	#elif defined color_type_classification
-		vec4 cl = getClassification(); 
-		color = cl.rgb;
-	#elif defined color_type_return_number
-		color = getReturnNumber();
-	#elif defined color_type_source
-		color = getSourceID();
-	#elif defined color_type_normal
-		color = (modelMatrix * vec4(normal, 0.0)).xyz;
-	#elif defined color_type_phong
-		color = color;
-	#elif defined color_type_composite
-		color = getCompositeColor();
+		color.xyz += texture2D(gradient, vec2(w,1.0-w)).rgb * colorWeights[color_weight_lod];
+	}
+	#endif
+
+	#ifdef color_weight_classification
+		color.xyz += getClassification().rgb * colorWeights[color_weight_classification];
+	#endif
+
+	#ifdef color_weight_return_number
+		color.xyz += getReturnNumber() * colorWeights[color_weight_return_number];
+	#endif
+
+	#ifdef color_weight_source
+		color.xyz += getSourceID() * colorWeights[color_weight_source];
+	#endif
+
+	#ifdef color_weight_normal
+		color.xyz += (modelMatrix * vec4(normal, 0.0)).xyz * colorWeights[color_weight_normal];
+	#endif
+
+	#ifdef color_weight_point_index
+		color = vec4(indices.rgb, uPCIndex / 255.) * colorWeights[color_weight_point_index];
 	#endif
 	
 	return color;
@@ -558,18 +398,7 @@ float getPointSize(){
 			//pointSize = pointSize * projFactor;
 		}
 	#elif defined adaptive_point_size
-		if(uUseOrthographicCamera) {
-			float worldSpaceSize = 1.0 * size * r / getPointSizeAttenuation();
-			pointSize = (worldSpaceSize / uOrthoWidth) * uScreenWidth;
-		} else {
-
-			if(uIsLeafNode && false){
-				pointSize = size * spacing * projFactor;
-			}else{
-				float worldSpaceSize = 1.0 * size * r / getPointSizeAttenuation();
-				pointSize = worldSpaceSize * projFactor;
-			}
-		}
+		pointSize = size * nearPlaneHeight / gl_Position.w / pow(2., getLOD());
 	#endif
 
 	pointSize = max(minSize, pointSize);
@@ -620,33 +449,37 @@ bool pointInClipPolygon(vec3 point, int polyIdx) {
 }
 #endif
 
-void doClipping(){
-
-	#if !defined color_type_composite
-		vec4 cl = getClassification(); 
-		if(cl.a == 0.0){
-			gl_Position = vec4(100.0, 100.0, 100.0, 0.0);
-			
+void clipClassification (){
+	#if defined(clip_classification)
+	for (int i = 0; i < clip_classification; i++){
+		if (classificationFilters[i] == classification){
 			return;
 		}
-	#endif
+	}
 
+	gl_Position = vec4(0.);
+	#endif
+}
+
+void doClipping(){
 	#if defined(clip_return_number_enabled)
 	{ // return number filter
 		vec2 range = uFilterReturnNumberRange;
 		if(returnNumber < range.x || returnNumber > range.y){
-			gl_Position = vec4(100.0, 100.0, 100.0, 0.0);
+			gl_Position = vec4(0.);
 			
 			return;
 		}
 	}
 	#endif
 
+	clipClassification();
+
 	#if defined(clip_number_of_returns_enabled)
 	{ // number of return filter
 		vec2 range = uFilterNumberOfReturnsRange;
 		if(numberOfReturns < range.x || numberOfReturns > range.y){
-			gl_Position = vec4(100.0, 100.0, 100.0, 0.0);
+			gl_Position = vec4(0.);
 			
 			return;
 		}
@@ -659,7 +492,7 @@ void doClipping(){
 		vec2 range = uFilterGPSTimeClipRange;
 
 		if(time < range.x || time > range.y){
-			gl_Position = vec4(100.0, 100.0, 100.0, 0.0);
+			gl_Position = vec4(0.);
 			
 			return;
 		}
@@ -671,12 +504,13 @@ void doClipping(){
 
 	#if defined(num_clipboxes) && num_clipboxes > 0
 		for(int i = 0; i < num_clipboxes; i++){
-			vec4 clipPosition = clipBoxes[i] * modelMatrix * vec4( position, 1.0 );
+			vec4 clipPosition = clipBoxes[i] * modelViewMatrix * vec4( position, 1.0 );
+			
 			bool inside = -0.5 <= clipPosition.x && clipPosition.x <= 0.5;
 			inside = inside && -0.5 <= clipPosition.y && clipPosition.y <= 0.5;
 			inside = inside && -0.5 <= clipPosition.z && clipPosition.z <= 0.5;
 
-			insideCount = insideCount + (inside ? 1 : 0);
+			insideCount += int(inside);
 			clipVolumesCount++;
 		}	
 	#endif
@@ -685,7 +519,7 @@ void doClipping(){
 		for(int i = 0; i < num_clippolygons; i++) {
 			bool inside = pointInClipPolygon(position, i);
 
-			insideCount = insideCount + (inside ? 1 : 0);
+			insideCount += int(inside);
 			clipVolumesCount++;
 		}
 	#endif
@@ -730,6 +564,8 @@ void main() {
 	gl_Position = projectionMatrix * mvPosition;
 	vLogDepth = log2(-mvPosition.z);
 
+	logDepth = vec2(gl_Position.w + 1., 1. / log2(far + 1.));
+
 	// POINT SIZE
 	float pointSize = getPointSize();
 	gl_PointSize = pointSize;
@@ -737,7 +573,6 @@ void main() {
 
 	// COLOR
 	vColor = getColor();
-
 
 	#if defined hq_depth_pass
 		float originalDepth = gl_Position.w;
@@ -748,6 +583,13 @@ void main() {
 		gl_Position = projectionMatrix * mvPosition;
 	#endif
 
+	//LOD CLIPPING clip lowel detail points if higher detail ponts are available
+	{
+		//vColor = vec4(position, 1);
+		int bit = int(position.x >= .5) + int(position.y >= .5) * 2 + int(position.z >= .5) * 4;
+
+		if (mod(setChildren / pow(2., float(bit)), 2.) >= 1.) gl_Position = vec4(0);
+	}
 
 	// CLIPPING
 	doClipping();
@@ -760,10 +602,7 @@ void main() {
 
 			if(distance < 1.0){
 				float w = distance;
-				vec3 cGradient = texture2D(gradient, vec2(w, 1.0 - w)).rgb;
-				
-				vColor = cGradient;
-				//vColor = cGradient * 0.7 + vColor * 0.3;
+				vColor.rgb = texture2D(gradient, vec2(w, 1.0 - w)).rgb;
 			}
 		}
 	#endif
@@ -820,18 +659,9 @@ void main() {
 				//vColor = vec3(0.0, 0.0, 0.2);
 			}else{
 				//vColor = vec3(1.0, 1.0, 1.0) * visibility + vec3(1.0, 1.0, 1.0) * vec3(0.5, 0.0, 0.0) * (1.0 - visibility);
-				vColor = vColor * visibility + vColor * uShadowColor * (1.0 - visibility);
+				vColor.xyz = vColor.xyz * visibility + vColor.xyz * uShadowColor * (1.0 - visibility);
 			}
 		}
 
 	#endif
-
-	//vColor = vec3(1.0, 0.0, 0.0);
-
-	//if(uDebug){
-	//	vColor.b = (vColor.r + vColor.g + vColor.b) / 3.0;
-	//	vColor.r = 1.0;
-	//	vColor.g = 1.0;
-	//}
-
 }

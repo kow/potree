@@ -66,7 +66,7 @@ export class ClippingTool extends EventDispatcher{
 
 		let domElement = this.viewer.renderer.domElement;
 		let canvasSize = this.viewer.renderer.getSize();
-
+		
 		let svg = $(`
 		<svg height="${canvasSize.height}" width="${canvasSize.width}" style="position:absolute; pointer-events: none">
 
@@ -96,7 +96,7 @@ export class ClippingTool extends EventDispatcher{
 		$(domElement.parentElement).append(svg);
 
 		let polyClipVol = new PolygonClipVolume(this.viewer.scene.getActiveCamera().clone());
-
+		
 		this.dispatchEvent({"type": "start_inserting_clipping_volume"});
 
 		this.viewer.scene.addPolygonClipVolume(polyClipVol);

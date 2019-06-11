@@ -16,7 +16,16 @@ export default [
 			name: 'Potree',
 			sourcemap: false
 		}
-	}/*,{
+	},{
+		input: 'src/workers/EptLaszipDecoderWorker.js',
+		output: {
+			file: 'build/potree/workers/EptLaszipDecoderWorker.js',
+			format: 'es',
+			name: 'Potree',
+			sourcemap: true
+		}
+	}
+	/*,{
 		input: 'src/workers/LASDecoderWorker.js',
 		output: {
 			file: 'build/potree/workers/LASDecoderWorker.js',

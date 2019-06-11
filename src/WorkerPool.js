@@ -19,6 +19,24 @@ export class WorkerPool{
 		return worker;
 	}
 
+	job (url, ...args) {
+		let worker = this.getWorker(url);
+
+		return new Promise ((ok, err) => {
+			worker.onmessage = msg => {
+				this.returnWorker(url, worker);
+				ok(msg);
+			}
+
+			worker.onerror = e => {
+				this.returnWorker(url, worker);
+				err(e);
+			}
+
+			worker.postMessage(...args);
+		});
+	}
+
 	returnWorker(url, worker){
 		this.workers[url].push(worker);
 	}

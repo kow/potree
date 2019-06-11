@@ -785,27 +785,9 @@ export class ProfileWindow extends EventDispatcher {
 			for (let [pointcloud, entry] of this.pointclouds) {
 				let material = entry.material;
 			
-				material.pointColorType = pointcloud.material.pointColorType;
-				material.uniforms.uColor = pointcloud.material.uniforms.uColor;
-				material.uniforms.intensityRange.value = pointcloud.material.uniforms.intensityRange.value;
-				material.elevationRange = pointcloud.material.elevationRange;
-
-				material.rgbGamma = pointcloud.material.rgbGamma;
-				material.rgbContrast = pointcloud.material.rgbContrast;
-				material.rgbBrightness = pointcloud.material.rgbBrightness;
-
-				material.intensityRange = pointcloud.material.intensityRange;
-				material.intensityGamma = pointcloud.material.intensityGamma;
-				material.intensityContrast = pointcloud.material.intensityContrast;
-				material.intensityBrightness = pointcloud.material.intensityBrightness;
-
-				material.uniforms.wRGB.value = pointcloud.material.uniforms.wRGB.value;
-				material.uniforms.wIntensity.value = pointcloud.material.uniforms.wIntensity.value;
-				material.uniforms.wElevation.value = pointcloud.material.uniforms.wElevation.value;
-				material.uniforms.wClassification.value = pointcloud.material.uniforms.wClassification.value;
-				material.uniforms.wReturnNumber.value = pointcloud.material.uniforms.wReturnNumber.value;
-				material.uniforms.wSourceID.value = pointcloud.material.uniforms.wSourceID.value;
-
+				material.color.r = 1;
+				material.color.g = 1;
+				material.color.b = 1;
 			}
 
 			this.pickSphere.visible = true;
@@ -875,6 +857,7 @@ export class ProfileWindowController {
 
 	progressHandler (pointcloud, progress) {
 		for (let segment of progress.segments) {
+			console.log(segment)
 			this.profileWindow.addPoints(pointcloud, segment.points);
 			this.numPoints += segment.points.numPoints;
 		}

@@ -3,8 +3,6 @@
 // https://github.com/cloudcompare/trunk/tree/master/plugins/qEDL/shaders/EDL
 //
 
-#extension GL_EXT_frag_depth : enable
-
 uniform float screenWidth;
 uniform float screenHeight;
 uniform vec2 neighbours[NEIGHBOUR_COUNT];

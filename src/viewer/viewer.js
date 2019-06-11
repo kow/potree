@@ -36,16 +36,11 @@ export class Viewer extends EventDispatcher{
 		this.guiLoadTasks = [];
 
 		this.messages = [];
-		this.elMessages = $(`
-		<div id="message_listing" 
-			style="position: absolute; z-index: 1000; left: 10px; bottom: 10px">
-		</div>`);
-		$(domElement).append(this.elMessages);
 		
 		try{
 
 		{ // generate missing dom hierarchy
-			if ($(domElement).find('#potree_map').length === 0) {
+			/*if ($(domElement).find('#potree_map').length === 0) {
 				let potreeMap = $(`
 					<div id="potree_map" class="mapBox" style="position: absolute; left: 50px; top: 50px; width: 400px; height: 400px; display: none">
 						<div id="potree_map_header" style="position: absolute; width: 100%; height: 25px; top: 0px; background-color: rgba(0,0,0,0.5); z-index: 1000; border-top-left-radius: 3px; border-top-right-radius: 3px;">
@@ -54,19 +49,7 @@ export class Viewer extends EventDispatcher{
 					</div>
 				`);
 				$(domElement).append(potreeMap);
-			}
-
-			if ($(domElement).find('#potree_description').length === 0) {
-				let potreeDescription = $(`<div id="potree_description" class="potree_info_text"></div>`);
-				$(domElement).append(potreeDescription);
-			}
-
-			if ($(domElement).find('#potree_annotations').length === 0) {
-				let potreeAnnotationContainer = $(`
-					<div id="potree_annotation_container" 
-						style="position: absolute; z-index: 100000; width: 100%; height: 100%; pointer-events: none;"></div>`);
-				$(domElement).append(potreeAnnotationContainer);
-			}
+			}*/
 		}
 
 		this.pointCloudLoadedCallback = args.onPointCloudLoaded || function () {};
@@ -313,51 +296,7 @@ export class Viewer extends EventDispatcher{
 			oldScene: oldScene,
 			scene: scene
 		});
-
-		{ // Annotations
-			$('.annotation').detach();
-
-			// for(let annotation of this.scene.annotations){
-			//	this.renderArea.appendChild(annotation.domElement[0]);
-			// }
-
-			this.scene.annotations.traverse(annotation => {
-				this.renderArea.appendChild(annotation.domElement[0]);
-			});
-
-			if (!this.onAnnotationAdded) {
-				this.onAnnotationAdded = e => {
-				// console.log("annotation added: " + e.annotation.title);
-
-					e.annotation.traverse(node => {
-
-						$("#potree_annotation_container").append(node.domElement);
-						//this.renderArea.appendChild(node.domElement[0]);
-						node.scene = this.scene;
-					});
-				};
-			}
-
-			if (oldScene) {
-				oldScene.annotations.removeEventListener('annotation_added', this.onAnnotationAdded);
-			}
-			this.scene.annotations.addEventListener('annotation_added', this.onAnnotationAdded);
-		}
 	};
-
-	getControls (navigationMode) {
-		if (navigationMode === OrbitControls) {
-			return this.orbitControls;
-		} else if (navigationMode === FirstPersonControls) {
-			return this.fpControls;
-		} else if (navigationMode === EarthControls) {
-			return this.earthControls;
-		} else if (navigationMode === DeviceOrientationControls) {
-			return this.deviceControls;
-		} else {
-			return null;
-		}
-	}
 
 	getMinNodeSize () {
 		return this.minNodeSize;
@@ -388,7 +327,7 @@ export class Viewer extends EventDispatcher{
 	}
 
 	setDescription (value) {
-		$('#potree_description')[0].innerHTML = value;
+		//$('#potree_description')[0].innerHTML = value;
 	};
 
 	setNavigationMode (value) {
@@ -542,22 +481,6 @@ export class Viewer extends EventDispatcher{
 
 	getFOV () {
 		return this.fov;
-	};
-
-	disableAnnotations () {
-		this.scene.annotations.traverse(annotation => {
-			annotation.domElement.css('pointer-events', 'none');
-
-			// return annotation.visible;
-		});
-	};
-
-	enableAnnotations () {
-		this.scene.annotations.traverse(annotation => {
-			annotation.domElement.css('pointer-events', 'auto');
-
-			// return annotation.visible;
-		});
 	};
 
 	setClassificationVisibility (key, value) {
@@ -904,8 +827,8 @@ export class Viewer extends EventDispatcher{
 		{ // create FIRST PERSON CONTROLS
 			this.fpControls = new FirstPersonControls(this);
 			this.fpControls.enabled = false;
-			this.fpControls.addEventListener('start', this.disableAnnotations.bind(this));
-			this.fpControls.addEventListener('end', this.enableAnnotations.bind(this));
+			//this.fpControls.addEventListener('start', this.disableAnnotations.bind(this));
+			//this.fpControls.addEventListener('end', this.enableAnnotations.bind(this));
 			// this.fpControls.addEventListener("double_click_move", (event) => {
 			//	let distance = event.targetLocation.distanceTo(event.position);
 			//	this.setMoveSpeed(Math.pow(distance, 0.4));
@@ -924,27 +847,6 @@ export class Viewer extends EventDispatcher{
 		//		this.setMoveSpeed(this.geoControls.moveSpeed);
 		//	});
 		// }
-
-		{ // create ORBIT CONTROLS
-			this.orbitControls = new OrbitControls(this);
-			this.orbitControls.enabled = false;
-			this.orbitControls.addEventListener('start', this.disableAnnotations.bind(this));
-			this.orbitControls.addEventListener('end', this.enableAnnotations.bind(this));
-		}
-
-		{ // create EARTH CONTROLS
-			this.earthControls = new EarthControls(this);
-			this.earthControls.enabled = false;
-			this.earthControls.addEventListener('start', this.disableAnnotations.bind(this));
-			this.earthControls.addEventListener('end', this.enableAnnotations.bind(this));
-		}
-
-		{ // create DEVICE ORIENTATION CONTROLS
-			this.deviceControls = new DeviceOrientationControls(this);
-			this.deviceControls.enabled = false;
-			this.deviceControls.addEventListener('start', this.disableAnnotations.bind(this));
-			this.deviceControls.addEventListener('end', this.enableAnnotations.bind(this));
-		}
 	};
 
 	toggleSidebar () {
@@ -1095,9 +997,12 @@ export class Viewer extends EventDispatcher{
 		this.renderer.sortObjects = false;
 		this.renderer.setSize(width, height);
 		this.renderer.autoClear = false;
+
+		this.renderer.domElement.style.outline = "none";
+		this.renderer.domElement.style.width = "100%"
+		this.renderer.domElement.style.height = "100%"
 		this.renderArea.appendChild(this.renderer.domElement);
 		this.renderer.domElement.tabIndex = '2222';
-		this.renderer.domElement.style.position = 'absolute';
 		this.renderer.domElement.addEventListener('mousedown', () => {
 			this.renderer.domElement.focus();
 		});
@@ -1117,6 +1022,7 @@ export class Viewer extends EventDispatcher{
 
 			gl.createVertexArray = extVAO.createVertexArrayOES.bind(extVAO);
 			gl.bindVertexArray = extVAO.bindVertexArrayOES.bind(extVAO);
+			gl.deleteVertexArray = extVAO.deleteVertexArrayOES.bind(extVAO);
 		}else if(gl instanceof WebGL2RenderingContext){
 			gl.getExtension("EXT_color_buffer_float");
 		}
@@ -1127,6 +1033,39 @@ export class Viewer extends EventDispatcher{
 
 		if(!this.visibleAnnotations){
 			this.visibleAnnotations = new Set();
+		}
+
+		{
+			//$('.annotation').detach();
+
+			// for(let annotation of this.scene.annotations){
+			//	this.renderArea.appendChild(annotation.domElement[0]);
+			// }
+
+			/*scene.annotations.traverse(annotation => {
+				if (!annotation.added){
+					annotation.added = true;
+					this.renderArea.appendChild(annotation.domElement[0]);
+				}
+			});*/
+
+			/*if (!this.onAnnotationAdded) {
+				this.onAnnotationAdded = e => {
+				// console.log("annotation added: " + e.annotation.title);
+
+					e.annotation.traverse(node => {
+
+						//$("#potree_annotation_container").append(node.domElement);
+						//this.renderArea.appendChild(node.domElement[0]);
+						node.scene = scene;
+					});
+				};
+			}
+
+			if (oldScene) {
+				oldScene.annotations.removeEventListener('annotation_added', this.onAnnotationAdded);
+			}
+			scene.annotations.addEventListener('annotation_added', this.onAnnotationAdded);*/
 		}
 
 		this.scene.annotations.updateBounds();
@@ -1286,7 +1225,13 @@ export class Viewer extends EventDispatcher{
 		let scene = this.scene;
 		let camera = scene.getActiveCamera();
 		
-		Potree.pointLoadLimit = Potree.pointBudget * 2;
+		if (this.oldPointBudget){
+			Potree.pointLoadLimit = Math.max(Potree.pointBudget * 2, Potree.pointLoadLimit + ((Potree.pointBudget * 2) - Potree.pointLoadLimit) * 0.001);
+		}else{
+			Potree.pointLoadLimit = Potree.pointBudget * 2;
+		}
+
+		this.oldPointBudget = Potree.pointBudget;
 
 		this.scene.directionalLight.position.copy(camera.position);
 		this.scene.directionalLight.lookAt(new THREE.Vector3().addVectors(camera.position, camera.getWorldDirection(new THREE.Vector3())));
@@ -1397,12 +1342,9 @@ export class Viewer extends EventDispatcher{
 
 				let visibleBoxes = [];
 				for(let pointcloud of this.scene.pointclouds){
-					for(let node of pointcloud.visibleNodes.filter(vn => vn.boundingBoxNode !== undefined)){
-						let box = node.boundingBoxNode;
-						visibleBoxes.push(box);
-					}
+					visibleBoxes = visibleBoxes.concat(pointcloud.boundingBoxNodes);
 				}
-
+				
 				bbRoot.children = visibleBoxes;
 			}
 		}
@@ -1442,23 +1384,8 @@ export class Viewer extends EventDispatcher{
 			//	}
 			//}
 
-			if(result.lowestSpacing !== Infinity){
-				let near = result.lowestSpacing * 10.0;
-				let far = -this.getBoundingBox().applyMatrix4(camera.matrixWorldInverse).min.z;
-
-				far = Math.max(far * 1.5, 1000);
-				near = Math.min(100.0, Math.max(0.01, near));
-				far = Math.max(far, near + 1000);
-
-				if(near === Infinity){
-					near = 0.1;
-				}
-				
-				camera.near = near;
-				camera.far = far;
-			}else{
-				// don't change near and far in this case
-			}
+			camera.near = 0.1;
+			camera.far = 1000000;
 
 			if(this.scene.cameraMode == CameraMode.ORTHOGRAPHIC) {
 				camera.near = -camera.far;
@@ -1468,23 +1395,36 @@ export class Viewer extends EventDispatcher{
 		this.scene.cameraP.fov = this.fov;
 		
 		// Navigation mode changed?
-		if (this.getControls(scene.view.navigationMode) !== this.controls) {
+		if (!this.controls || scene.view.navigationMode !== this.controls.constructor) {
 			if (this.controls) {
 				this.controls.enabled = false;
 				this.inputHandler.removeInputListener(this.controls);
 			}
 
-			this.controls = this.getControls(scene.view.navigationMode);
+			this.controls = new scene.view.navigationMode(this);
 			this.controls.enabled = true;
 			this.inputHandler.addInputListener(this.controls);
 		}
 		
-		if (this.getControls(scene.view.navigationMode) === this.deviceControls) {
+		if (scene.view.navigationMode === DeviceOrientationControls) {
 			this.controls.setScene(scene);
 			this.controls.update(delta);
 
 			this.scene.cameraP.position.copy(scene.view.position);
 			this.scene.cameraO.position.copy(scene.view.position);
+
+			camera.updateMatrix();
+			camera.updateMatrixWorld();
+		} else if (this.controls && scene.view.matrix){
+			this.controls.setScene(scene);
+			this.controls.update(delta);
+			this.scene.cameraP.controls = this.controls;
+			
+			this.scene.cameraP.position.copy(scene.view.position);			
+			camera.matrix.copy({elements: scene.view.matrix});
+
+			camera.matrixAutoUpdate = false;
+			camera.updateMatrixWorld(true);
 		} else if (this.controls !== null) {
 			this.controls.setScene(scene);
 			this.controls.update(delta);
@@ -1498,10 +1438,11 @@ export class Viewer extends EventDispatcher{
 			this.scene.cameraO.rotation.order = "ZXY";
 			this.scene.cameraO.rotation.x = Math.PI / 2 + this.scene.view.pitch;
 			this.scene.cameraO.rotation.z = this.scene.view.yaw;
+
+			camera.updateMatrix();
+			camera.updateMatrixWorld();
 		}
 		
-		camera.updateMatrix();
-		camera.updateMatrixWorld();
 		camera.matrixWorldInverse.getInverse(camera.matrixWorld);
 
 		{
@@ -1540,19 +1481,12 @@ export class Viewer extends EventDispatcher{
 			for(let profile of this.scene.profiles){
 				boxes.push(...profile.boxes);
 			}
-			
-			let clipBoxes = boxes.map( box => {
-				box.updateMatrixWorld();
-				let boxInverse = new THREE.Matrix4().getInverse(box.matrixWorld);
-				let boxPosition = box.getWorldPosition(new THREE.Vector3());
-				return {box: box, inverse: boxInverse, position: boxPosition};
-			});
 
 			let clipPolygons = this.scene.polygonClipVolumes.filter(vol => vol.initialized);
 			
 			// set clip volumes in material
 			for(let pointcloud of this.scene.pointclouds.filter(pc => pc.visible)){
-				pointcloud.material.setClipBoxes(clipBoxes);
+				pointcloud.material.setClipBoxes(boxes);
 				pointcloud.material.setClipPolygons(clipPolygons, this.clippingTool.maxPolygonVertices);
 				pointcloud.material.clipTask = this.clipTask;
 				pointcloud.material.clipMethod = this.clipMethod;
@@ -1590,6 +1524,7 @@ export class Viewer extends EventDispatcher{
 		if(Potree.measureTimings) performance.mark("render-start");
 
 		{ // resize
+			//console.log(this.renderArea)
 			let width = this.scaleFactor * this.renderArea.clientWidth;
 			let height = this.scaleFactor * this.renderArea.clientHeight;
 			let pixelRatio = this.renderer.getPixelRatio();
@@ -1821,7 +1756,7 @@ export class Viewer extends EventDispatcher{
 			}
 		});
 
-		this.elMessages.prepend(message.element);
+		//this.elMessages.prepend(message.element);
 
 		message.element.slideToggle(animationDuration);
 

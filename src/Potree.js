@@ -106,6 +106,104 @@ let resourcePath = scriptPath + '/resources';
 
 export {scriptPath, resourcePath};
 
+export function loadShapefile(path, projection){
+	let object = new THREE.Object3D();
+
+	Potree.Utils.loadShapefileFeatures(path, features => {
+		for (let feature of features){
+			let geometry = feature.geometry;
+			let color = new THREE.Color(0, 1, 1);
+			
+			if(feature.geometry.type === "Point"){
+				let sg = new THREE.SphereGeometry(1, 18, 18);
+				let sm = new THREE.MeshNormalMaterial();
+				let s = new THREE.Mesh(sg, sm);
+				
+				let [long, lat] = geometry.coordinates;
+				let pos = projection.forward([long, lat]);
+				
+				s.position.set(...pos, 20);
+				
+				s.scale.set(10, 10, 10);
+				object.add(s);
+			}else if(geometry.type === "LineString"){
+				let coordinates = [];
+				
+				let min = new THREE.Vector3(Infinity, Infinity, Infinity);
+				for(let i = 0; i < geometry.coordinates.length; i++){
+					let [long, lat] = geometry.coordinates[i];
+					let pos = projection.forward([long, lat]);
+					
+					min.x = Math.min(min.x, pos[0]);
+					min.y = Math.min(min.y, pos[1]);
+					min.z = Math.min(min.z, 20);
+					
+					coordinates.push(...pos, 20);
+					if(i > 0 && i < geometry.coordinates.length - 1){
+						coordinates.push(...pos, 20);
+					}
+				}
+				
+				for(let i = 0; i < coordinates.length; i += 3){
+					coordinates[i+0] -= min.x;
+					coordinates[i+1] -= min.y;
+					coordinates[i+2] -= min.z;
+				}
+				
+				let positions = new Float32Array(coordinates);
+				
+				let lineGeometry = new THREE.BufferGeometry();
+				lineGeometry.addAttribute("position", new THREE.BufferAttribute(positions, 3));
+				
+				let material = new THREE.LineBasicMaterial( { color: color} );
+				let line = new THREE.LineSegments(lineGeometry, material);
+				line.position.copy(min);
+				
+				object.add(line);
+			}else if(geometry.type === "Polygon"){
+				for(let pc of geometry.coordinates){
+					let coordinates = [];
+					
+					let min = new THREE.Vector3(Infinity, Infinity, Infinity);
+					for(let i = 0; i < pc.length; i++){
+						let [long, lat] = pc[i];
+						let pos = projection.forward([long, lat]);
+						
+						min.x = Math.min(min.x, pos[0]);
+						min.y = Math.min(min.y, pos[1]);
+						min.z = Math.min(min.z, 20);
+						
+						coordinates.push(...pos, 20);
+						if(i > 0 && i < pc.length - 1){
+							coordinates.push(...pos, 20);
+						}
+					}
+					
+					for(let i = 0; i < coordinates.length; i += 3){
+						coordinates[i+0] -= min.x;
+						coordinates[i+1] -= min.y;
+						coordinates[i+2] -= min.z;
+					}
+					
+					let positions = new Float32Array(coordinates);
+					
+					let lineGeometry = new THREE.BufferGeometry();
+					lineGeometry.addAttribute("position", new THREE.BufferAttribute(positions, 3));
+					
+					let material = new THREE.LineBasicMaterial( { color: color} );
+					let line = new THREE.LineSegments(lineGeometry, material);
+					line.position.copy(min);
+					
+					object.add(line);
+				}
+			}else{
+				console.log("unhandled feature: ", feature);
+			}
+		}
+	});
+
+	return object;
+}
 
 export function loadPointCloud(path, name, callback){
 	let loaded = function(pointcloud){
@@ -113,9 +211,8 @@ export function loadPointCloud(path, name, callback){
 		callback({type: 'pointcloud_loaded', pointcloud: pointcloud});
 	};
 
-	// load pointcloud
 	if (!path){
-		// TODO: callback? comment? Hello? Bueller? Anyone?
+		throw new Error("no point cloud given");
 	} else if (path.indexOf('ept.json') > 0) {
 		Potree.EptLoader.load(path, function(geometry) {
 			if (!geometry) {

@@ -167,7 +167,7 @@ export class MeasuringTool extends EventDispatcher{
 				if(this.viewer.scene.cameraMode == CameraMode.PERSPECTIVE) {
 					let direction = labelPos.sub(camera.position).normalize();
 					labelPos = new THREE.Vector3().addVectors(
-						camera.position, direction.multiplyScalar(distance));
+						camera.position, direction);
 
 				}
 				label.position.copy(labelPos);
