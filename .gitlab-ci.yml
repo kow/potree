@@ -17,3 +17,6 @@ build_app:
    - develop
   script:
    - gulp build
+  artifacts:
+   paths:
+    - build/
