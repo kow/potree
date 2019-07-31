@@ -39,10 +39,6 @@ let workers = {
 	"LASDecoderWorker.js": [
 		"src/workers/LASDecoderWorker.js"
 	],
-	"EptLaszipDecoderWorker.js": [
-		"src/loader/las/LASDecoder",
-		"src/workers/EptLaszipDecoderWorker.js"
-	],
 	"EptBinaryDecoderWorker.js": [
 		"src/workers/EptBinaryDecoderWorker.js"
 	],
@@ -102,6 +98,12 @@ gulp.task("build", ['workers','shaders', "icons_viewer", "examples_page"], funct
 
 	gulp.src(["LICENSE"])
 		.pipe(gulp.dest('build/potree'));
+
+	exec('rollup -c', function (err, stdout, stderr) {
+		console.log(stdout);
+		console.log(stderr);
+		//cb(err);
+	});
 
 	return;
 });
@@ -431,12 +433,6 @@ gulp.task('watch', ["build", "webserver"], function() {
 		console.log("watch event:");
 		console.log(cb);
 		gulp.run("build");
-
-		exec('rollup -c', function (err, stdout, stderr) {
-			console.log(stdout);
-			console.log(stderr);
-			//cb(err);
-		});
 	});
 
 });
