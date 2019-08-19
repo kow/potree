@@ -26,6 +26,7 @@ uniform mat4 uViewInv;
 uniform float setChildren;
 
 uniform float nodeLevel;
+uniform float uDensity;
 
 uniform float uScreenWidth;
 uniform float uScreenHeight;
@@ -389,7 +390,7 @@ float getPointSize(){
 	float r = uOctreeSpacing * 1.7;
 	vRadius = r;
 	#if defined fixed_point_size
-		pointSize = size;
+		pointSize = size / 100.;
 	#elif defined attenuated_point_size
 		if(uUseOrthographicCamera){
 			pointSize = size;
@@ -398,7 +399,7 @@ float getPointSize(){
 			//pointSize = pointSize * projFactor;
 		}
 	#elif defined adaptive_point_size
-		pointSize = size * nearPlaneHeight / gl_Position.w / pow(2., getLOD());
+		pointSize = size * nearPlaneHeight / gl_Position.w / uDensity;
 	#endif
 
 	pointSize = max(minSize, pointSize);

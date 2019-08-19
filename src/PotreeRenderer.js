@@ -730,8 +730,9 @@ export class Renderer {
 			}*/
 
 			gl.uniformMatrix4fv(shader.uniformLocations["modelViewMatrix"], false, transform.elements);
-			
+
 			shader.setUniform1f('uLevel', level);
+			shader.setUniform1f('uDensity', (Math.pow(node.geometryNode.density, 1/3) * 1000) || 1);
 			shader.setUniform1f("uNodeSpacing", node.geometryNode.spacing);
 			shader.setUniform1f("setChildren", childrenMasking);
 
@@ -1301,11 +1302,3 @@ export class Renderer {
 		this.threeRenderer.state.reset();
 	}
 };
-
-
-
-
-
-
-
-

@@ -22,6 +22,9 @@ let strides = {
 
 const Buffer = (typeof SharedArrayBuffer == 'undefined') ? ArrayBuffer : SharedArrayBuffer;
 
+let densityBufferSize = 100; //samples per dimention
+let densityBuffer = new Uint32Array(Math.ceil(densityBufferSize * densityBufferSize * densityBufferSize / 32))
+
 async function readUsingDataView(event) {
 	performance.mark("laslaz-start");
 
@@ -77,12 +80,25 @@ async function readUsingDataView(event) {
 
 	let size = [max[0] - min[0], max[1] - min[1], max[2] - min[2]].map((e, i) => scale[i] / e);
 	let off = offset.map((e, i) => (e - min[i]) / scale[i]);
+
+	let parentNumPoints = 0;
 	
+	let pointCounts = [0, 0, 0, 0, 0, 0, 0, 0]
 	for (let i = 0; i < numPoints; i++) {
+
 		// POSITION
-		positions[3 * i + 0] = (sourceView.getInt32(i * pointSize + 0, true) + off[0]) * size[0];
-		positions[3 * i + 1] = (sourceView.getInt32(i * pointSize + 4, true) + off[1]) * size[1];
-		positions[3 * i + 2] = (sourceView.getInt32(i * pointSize + 8, true) + off[2]) * size[2];
+		{
+			let x = (sourceView.getInt32(i * pointSize + 0, true) + off[0]) * size[0];
+			let y = (sourceView.getInt32(i * pointSize + 4, true) + off[1]) * size[1];
+			let z = (sourceView.getInt32(i * pointSize + 8, true) + off[2]) * size[2];
+
+			//count all points and sort them into the 8 quadrents
+			pointCounts[(x >= .5 ? 1 : 0) | (y >= .5 ? 2 : 0) | (z >= .5 ? 4 : 0)]++;
+
+			positions[3 * i + 0] = x
+			positions[3 * i + 1] = y
+			positions[3 * i + 2] = z
+		}
 
 		// INTENSITY
 		let intensity = sourceView.getUint16(i * pointSize + 12, true);
@@ -123,8 +139,6 @@ async function readUsingDataView(event) {
 		}
 	}
 
-	sourceUint8.free();
-
 	let attributes = {
 		position: positions,
 		color: colors,
@@ -135,16 +149,7 @@ async function readUsingDataView(event) {
 		pointSourceID: pointSourceIDs
 	}
 
-	let pointCounts = [0, 0, 0, 0, 0, 0, 0, 0]
-
-	//count all points and sort them into the 8 quadrents
-	{
-		let pos = positions;
-
-		for (let i = 0; i < pos.length; i += 3){
-			pointCounts[(pos[i] >= .5 ? 1 : 0) | (pos[i + 1] >= .5 ? 2 : 0) | (pos[i + 2] >= .5 ? 4 : 0)]++;
-		}
-	}
+	sourceUint8.free();
 
 	if (event.data.parentAttributes){
 		let pos = event.data.parentAttributes.position;
@@ -201,7 +206,11 @@ async function readUsingDataView(event) {
 		let pos = attributes.position;
 
 		for (let i = 0; i < pos.length; i += 3){
-			pointCounts[(pos[i] >= .5 ? 1 : 0) | (pos[i + 1] >= .5 ? 2 : 0) | (pos[i + 2] >= .5 ? 4 : 0)]++;
+			let x = pos[i];
+			let y = pos[i + 1];
+			let z = pos[i + 2];
+
+			pointCounts[(x >= .5 ? 1 : 0) | (y >= .5 ? 2 : 0) | (z >= .5 ? 4 : 0)]++;
 		}
 
 		let arrays = [];
@@ -288,6 +297,37 @@ async function readUsingDataView(event) {
 		iIndices[i] = i;
 	}
 
+	let density;
+
+	{
+		let pos = attributes.position;
+
+		for (let i = 0; i < pos.length; i += 3){
+			let ix = (pos[i + 0] * densityBufferSize) | 0;
+			let iy = (pos[i + 1] * densityBufferSize) | 0;
+			let iz = (pos[i + 2] * densityBufferSize) | 0;
+			let ii = ix + (iy + iz * densityBufferSize) * densityBufferSize;
+
+			densityBuffer[ii >> 5] |= 1 << (ii & 31);
+		}
+
+		let occupied = 0;
+
+		for (let i = 0; i < densityBuffer.length; i++){
+			while (densityBuffer[i]){
+				densityBuffer[i] &= densityBuffer[i] - 1;
+				occupied++;
+			}
+		}
+
+		density = (pos.length / 3) / (
+			((max[0] - min[0]) / densityBufferSize) *
+			((max[1] - min[1]) / densityBufferSize) *
+			((max[2] - min[2]) / densityBufferSize) *
+			occupied
+		);
+	}
+
 	let message = {
 		pointCounts,
 		numPoints,
@@ -299,7 +339,8 @@ async function readUsingDataView(event) {
 		returnNumber: attributes.returnNumber.buffer,
 		numberOfReturns: attributes.numberOfReturns.buffer,
 		pointSourceID: attributes.pointSourceID.buffer,
-		indices: indices
+		indices: indices,
+		density
 	};
 
 	let transferables = Buffer == ArrayBuffer ? [
