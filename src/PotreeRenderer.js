@@ -1081,9 +1081,11 @@ export class Renderer {
 
 			shader.setUniform1i("clipMethod", material.clipMethod);
 
-			//alpha blending
-			gl.enable(gl.BLEND);
-			gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+			if (!material.colorMixer.point_index){
+				//alpha blending
+				gl.enable(gl.BLEND);
+				gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+			}
 			
 			//being lazy here using a different math library than three
 			if (Math.Vector && material.clipBoxes && material.clipBoxes.length > 0) {
