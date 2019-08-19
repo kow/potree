@@ -49,7 +49,9 @@ void main() {
 		gl_FragColor.xyz = gl_FragColor.xyz * weight;
 	#endif
 
-	gl_FragColor.a *= clamp(vPointSize, 0., 1.);
+	#ifndef color_weight_point_index
+		gl_FragColor.a *= clamp(vPointSize, 0., 1.);
+	#endif
 
 	//gl_FragDepthEXT = log2(logDepth.x) * logDepth.y;
 }
