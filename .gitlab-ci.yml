@@ -4,19 +4,60 @@ cache:
   paths:
    - node_modules/
 
-before_script:
-  - npm install
-  - npm i -g gulp
-
 stages:
   - build
+  - deploy
 
-build_app:
+build app:
   stage: build
   only:
-   - develop
+    # - develop
+    # - ci-pipeline
+  before_script:
+    - npm install
+    - npm i -g gulp
+    - npm i -g rollup
+    - apt-get update
+    - apt-get install zip # install zip utility
   script:
-   - gulp build
+    - gulp build
+    - zip -r -qq potree.zip ./build ./libs # zip contents of backend directory into new folder
   artifacts:
    paths:
-    - build/
+    - potree.zip
+
+deploy to aws:
+  stage: deploy
+  only:
+    - develop
+    - ci-pipeline
+  before_script:
+    # https://docs.gitlab.com/ee/ci/ssh_keys/#verifying-the-ssh-host-keys
+    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )' # check for an ssh client and install openssh if necessary
+    - eval $(ssh-agent -s) # run ssh-agent inside the build environment
+    - echo "$AWS_SERVER_SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add - > /dev/null # add ssh key to agent store and delete all carriage returns
+    - mkdir -p ~/.ssh # make an ssh directory
+    - chmod 700 ~/.ssh # limit permissions on the ssh directory
+    # explicitely check for docker environment (which we should be in)
+    # then disable host key checking so that we are not prompted to verify the host, which would cause the build to fail
+    # https://docs.gitlab.com/ee/ci/ssh_keys/#verifying-the-ssh-host-keys
+    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+  script:
+    - scp potree.zip ubuntu@$AWS_SERVER_DNS:/data/code # copy build zip to server
+     # ssh to connect to server, then:
+      # install unzip utility
+      # stop backend and dev-proxy services
+      # unzip potree on server and copy needed directories to webapp
+      # remove the zip we created on the server
+      # start backend and dev proxy
+      # NOTE: These commands are executed in the context of server (we do not have GitLab environment variables)
+    - ssh ubuntu@$AWS_SERVER_DNS
+     'sudo apt-get update;
+      sudo apt-get install unzip;
+      sudo systemctl stop webapp-backend;
+      sudo systemctl stop dev-proxy;
+      unzip -o -qq /data/code/potree.zip -d /data/code/webapp/public;
+      rm -rf /data/code/potree.zip;
+      sudo systemctl daemon-reload;
+      sudo systemctl start webapp-backend;
+      sudo systemctl start dev-proxy'
