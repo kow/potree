@@ -92,6 +92,7 @@ export class EptLaszipLoader {
 		);
 
 		node.pointCounts = e.data.pointCounts;
+		node.density = e.data.density;
 
 		node.doneLoading(
 				g,
