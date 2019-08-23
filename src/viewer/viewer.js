@@ -1422,8 +1422,12 @@ export class Viewer extends EventDispatcher{
 			
 			this.scene.cameraP.position.copy(scene.view.position);			
 			camera.matrix.copy({elements: scene.view.matrix});
-
 			camera.matrixAutoUpdate = false;
+
+			if (this.controls.getProjection){
+				camera.projectionMatrix.copy({elements: this.controls.getProjection()})
+			}
+
 			camera.updateMatrixWorld(true);
 		} else if (this.controls !== null) {
 			this.controls.setScene(scene);
@@ -1525,8 +1529,19 @@ export class Viewer extends EventDispatcher{
 
 		{ // resize
 			//console.log(this.renderArea)
-			let width = this.scaleFactor * this.renderArea.clientWidth;
-			let height = this.scaleFactor * this.renderArea.clientHeight;
+
+			let width, height;
+
+			if (this.resolution){
+				[width, height] = this.resolution;
+			}else{
+				let width = this.renderArea.clientWidth;
+				let height = this.renderArea.clientHeight;
+			}
+
+			width *= this.scaleFactor;
+			height *= this.scaleFactor;
+
 			let pixelRatio = this.renderer.getPixelRatio();
 			let aspect = width / height;
 
